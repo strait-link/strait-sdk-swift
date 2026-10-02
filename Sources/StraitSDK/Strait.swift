@@ -11,10 +11,13 @@ public struct MatchResult: Decodable, Equatable {
 }
 
 public struct StraitConfig {
-    public let appId: String
+    /// Workspace publishable key (`bk_pub_live_…` / `bk_pub_test_…`) from
+    /// Dashboard → Get started. Safe to ship in apps; never use your secret
+    /// key (`bk_live_…`) here.
+    public let publishableKey: String
     public let endpoint: String
-    public init(appId: String, endpoint: String) {
-        self.appId = appId
+    public init(publishableKey: String, endpoint: String) {
+        self.publishableKey = publishableKey
         self.endpoint = endpoint
     }
 }
@@ -35,7 +38,7 @@ public enum Strait {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body: [String: Any] = [
-            "appId": config.appId,
+            "publishableKey": config.publishableKey,
             "platform": "ios",
             "screenWidth": device.screenWidth,
             "pixelRatio": device.pixelRatio,

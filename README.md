@@ -22,12 +22,15 @@ the server and every other SDK via [`shared-spec`](../shared-spec) golden vector
 import StraitSDK
 
 let result = await Strait.resolveDeferredLink(
-    StraitConfig(appId: "YOUR_APP_ID", endpoint: "https://go.yourbrand.com")
+    StraitConfig(publishableKey: "bk_pub_live_…", endpoint: "https://go.yourbrand.com")
 )
 if result.matched, let url = result.longUrl {
     // route to url
 }
 ```
+
+**Publishable key:** Dashboard → Get started → Publishable key (`bk_pub_live_…`).
+It's safe to include in your app. Never put your secret key (`bk_live_…`) in an app.
 
 Collects only coarse device fields (screen width, scale, language, timezone);
 the **server** adds the observed IP and computes the match signature.
