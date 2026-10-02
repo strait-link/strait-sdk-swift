@@ -37,14 +37,9 @@ public enum Strait {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = [
-            "publishableKey": config.publishableKey,
-            "platform": "ios",
-            "screenWidth": device.screenWidth,
-            "pixelRatio": device.pixelRatio,
-            "language": device.language,
-            "timezone": device.timezone,
-        ]
+        var body = device.json
+        body["publishableKey"] = config.publishableKey
+        body["platform"] = "ios"
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         do {
@@ -59,17 +54,31 @@ public enum Strait {
     }
 }
 
-struct DeviceFields {
-    let screenWidth: Int
-    let pixelRatio: Double
-    let language: String
-    let timezone: String
+/// Coarse device fields sent for the deferred match (the server adds the IP).
+public struct DeviceFields: Equatable {
+    public let screenWidth: Int
+    public let pixelRatio: Double
+    public let language: String
+    public let timezone: String
+
+    public init(screenWidth: Int, pixelRatio: Double, language: String, timezone: String) {
+        self.screenWidth = screenWidth
+        self.pixelRatio = pixelRatio
+        self.language = language
+        self.timezone = timezone
+    }
+
+    var json: [String: Any] {
+        ["screenWidth": screenWidth, "pixelRatio": pixelRatio, "language": language, "timezone": timezone]
+    }
 }
 
-func collectDevice() -> DeviceFields {
-    #if canImport(UIKit)
+/// This device's fields. `screenWidth` is `browserScreenWidth` of the logical
+/// width, so it equals what Safari reports at the tap (B2).
+public func collectDevice() -> DeviceFields {
+    #if canImport(UIKit) && !os(watchOS)
     let screen = UIScreen.main
-    let width = Int(screen.bounds.width.rounded())
+    let width = browserScreenWidth(Double(screen.bounds.width))
     let scale = Double(screen.scale)
     #else
     let width = 0

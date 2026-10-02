@@ -13,14 +13,125 @@ the server and every other SDK via [`shared-spec`](../shared-spec) golden vector
 ## Install (Swift Package Manager)
 
 ```swift
-.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.1.0")
+.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.3.0")
 ```
 
-## Use
+## Use — `StraitLinks` (direct + deferred links, analytics)
+
+Create one client at launch and keep it for the app's lifetime.
 
 ```swift
 import StraitSDK
 
+let strait = StraitLinks(StraitLinksConfig(
+    publishableKey: "bk_pub_live_…",
+    endpoint: "https://go.yourbrand.com",
+    linkHosts: ["links.yourbrand.com"]   // extra short-link domains: URLs or bare hosts
+))
+
+strait.onLinkStart { start in showOpeningLink(start.id) }   // loading state
+strait.onLink { event in                                    // replays past events
+    guard event.matched, let path = event.path else { return }
+    router.open(path, params: event.params ?? [:])
+}
+```
+
+### UIKit with scenes (SceneDelegate)
+
+```swift
+func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
+    // The link that launched the app from closed (Universal Link or custom scheme).
+    let launchURL = options.userActivities.first(where: { $0.activityType == NSUserActivityTypeBrowsingWeb })?.webpageURL
+        ?? options.urlContexts.first?.url
+    strait.start(initialURL: launchURL)       // also runs the deferred check, once per install
+}
+
+func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+    strait.handle(userActivity: userActivity)  // Universal Link while running
+}
+
+func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    URLContexts.forEach { strait.handle(url: $0.url) }   // yourapp://… browser hand-off
+}
+```
+
+Without scenes, do the same from `application(_:didFinishLaunchingWithOptions:)`
+(`launchOptions?[.url]`), `application(_:continue:restorationHandler:)` and
+`application(_:open:options:)`.
+
+### SwiftUI
+
+```swift
+@main struct ShopApp: App {
+    init() { strait.start() }
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .onOpenURL { strait.handle(url: $0) }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { strait.handle(userActivity: $0) }
+        }
+    }
+}
+```
+
+SwiftUI delivers the cold-launch URL through `onOpenURL` too, so it is labelled
+by app state rather than `closed`; if you need `closed` (and the first-launch
+deferred skip), adopt a `UIApplicationDelegateAdaptor`/scene delegate and pass
+the launch URL to `start(initialURL:)`.
+
+### Lifecycle and storage
+
+- `start` observes `UIApplication` didBecomeActive / willResignActive /
+  didEnterBackground to label links `background` vs `foreground`. Set
+  `observeLifecycle: false` and call `strait.onAppState(.active | .inactive | .background)`
+  to feed it yourself. `stop()` removes the observers.
+- The once-per-install flag `strait.deferredChecked` lives in
+  `UserDefaults.standard` by default; pass any `StraitStorage` to change that.
+- `transport:` (a `StraitTransport`, default `URLSession.shared`), `now:` and
+  `device:` are injectable for tests. Callbacks run on the main queue
+  (`callbackQueue: nil` runs them on whatever thread finished the work).
+
+### Analytics + fingerprint check
+
+```swift
+strait.trackEvent("purchase", value: 49.99, currency: "USD", linkId: event.linkId) { ok in }
+strait.reportFingerprint { json in }   // POST /v1/debug/fingerprint, origin "app"
+strait.compareFingerprint { json in }  // engine's app-vs-browser comparison
+strait.checkDeferred { event in }      // re-run the deferred check (debugging)
+```
+
+### `LinkEvent`
+
+`id` · `kind` (`direct` / `deferred`) · `route` (`app_link`, `custom_scheme`,
+`fingerprint`) · `appState` (`closed`, `background`, `foreground`) · `matched` ·
+`reason` (`not_found`, `expired`, `password_protected`, `no_match`, `network`,
+`invalid_url`) · `rawUrl` · `url` · `path` · `params` · `linkId` · `ms` · `at`.
+A `LinkStart` with the same `id` fires first, before any network call.
+
+## Behaviours (shared-spec/SDK-CONTRACT.md)
+
+| # | Status |
+|---|---|
+| B1 publishableKey in every body | ✓ (`/v1/match`, `/v1/resolve`, `/v1/event`, `/v1/debug/fingerprint`; GET compare sends it as a query param) |
+| B2 `screenWidth = browserScreenWidth(UIScreen.main.bounds.width)` | ✓ |
+| B3 short links on link hosts → `POST /v1/resolve {publishableKey,url,platform:'ios'}` | ✓ (hosts via `normalizeLinkHosts`) |
+| B4 custom scheme / https classification (`classifyUrl`) | ✓ |
+| B5 app-state labels (`AppStateTracker`, 2000/1000 ms) | ✓ |
+| B6 deferred once per install, skipped-but-marked when launched by a link | ✓ |
+| B7 Android Play Install Referrer | n/a on iOS (`parseStraitLink` is ported for parity) |
+| B8 iOS deferred `POST /v1/match` with device fields | ✓ |
+| B9 one event type, replay, start signal | ✓ |
+| B10 never throws; network → `matched:false, reason:'network'` | ✓ |
+| B11 JSON via `JSONSerialization` | ✓ |
+| B12 `splitUrl` without `URLComponents` | ✓ |
+| B13 `trackEvent`, `reportFingerprint`, `compareFingerprint` | ✓ |
+
+Both `test-vectors.json` (signature) and `conformance-vectors.json` (pure
+helpers) run under `swift test` in CI.
+
+## Deferred match only (legacy, still supported)
+
+```swift
 let result = await Strait.resolveDeferredLink(
     StraitConfig(publishableKey: "bk_pub_live_…", endpoint: "https://go.yourbrand.com")
 )
