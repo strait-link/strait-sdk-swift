@@ -28,6 +28,6 @@ them into the README install block and LICENSE.
 
 ## Optional: CocoaPods
 
-Only if customers ask for it (CocoaPods trunk is read-only for new pods from late
-2026, so SwiftPM is the path forward). It would need a `<Product>.podspec` generated
+Only if customers ask for it. CocoaPods has announced its trunk goes read-only
+(planned for December 2026), so SwiftPM is the path forward. It would need a `<Product>.podspec` generated
 from `brand.json` and a `COCOAPODS_TRUNK_TOKEN` secret.
