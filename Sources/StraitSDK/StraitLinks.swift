@@ -175,6 +175,9 @@ public final class StraitLinks {
     public static let deferredFlag = "strait.deferredChecked"
     /// Open reports that didn't get through, retried later (JSON array).
     public static let queueKey = "strait.pendingOpens"
+    /// The tap id of the last attributed link open, sent with conversion
+    /// events for 7 days (contract B15): `{"clickId":…,"at":<ms>}`.
+    public static let tapKey = "strait.lastTap"
 
     private let config: StraitLinksConfig
     private let base: String
@@ -353,18 +356,24 @@ public final class StraitLinks {
         }
     }
 
-    /// Conversion / revenue event. Completes with true when accepted.
+    /// Conversion / revenue event. Completes with true when accepted. Carries
+    /// the tap id of the last attributed link open (≤7 days, contract B15)
+    /// unless you pass `clickId` yourself.
     public func trackEvent(
         _ name: String,
         value: Double? = nil,
         currency: String? = nil,
         linkId: String? = nil,
+        clickId: String? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
         var body: [String: Any] = ["publishableKey": config.publishableKey, "event": name, "platform": config.platform]
         if let value = value { body["value"] = value }
         if let currency = currency { body["currency"] = currency }
         if let linkId = linkId { body["linkId"] = linkId }
+        if let tap = eventClickId(config.storage.getItem(Self.tapKey), now: config.now(), explicit: clickId) {
+            body["clickId"] = tap
+        }
         call("POST", "/v1/event", body) { [self] r in
             let ok = (try? r.get().ok) ?? false
             deliver { completion?(ok) }
@@ -389,6 +398,12 @@ public final class StraitLinks {
 
     // MARK: Internals
 
+    /// Remember the tap of an attributed open (B15), or forget the older one
+    /// when this newer attributed open has no tap id the SDK knows.
+    private func noteTap(_ clickId: String?, at: Double) {
+        config.storage.setItem(Self.tapKey, clickId.map { rememberTap($0, at: at) } ?? "")
+    }
+
     private func handleUrl(_ raw: String, appState: AppStateAtLink, firstLaunch: Bool, completion: ((LinkEvent) -> Void)?) {
         let t0 = config.now()
         let id = newOpenId(t0)
@@ -407,6 +422,7 @@ public final class StraitLinks {
         }
         switch c {
         case let .destination(route, url, path, params, clickId):
+            if let clickId = clickId { noteTap(clickId, at: t0) }
             // Navigation never waits for the report.
             report(OpenReport(
                 openId: id, kind: .direct, route: route, appState: appState, platform: platform, url: url,
@@ -435,6 +451,7 @@ public final class StraitLinks {
                 let matched = (json["matched"] as? Bool) == true
                 let reason = matched ? nil : (json["reason"] as? String) ?? (json["error"] as? String)
                 let linkId = json["linkId"] as? String
+                if matched { noteTap(nil, at: t0) }
                 if (json["recorded"] as? Bool) != true {
                     var rep = base
                     rep.matched = matched
@@ -469,6 +486,7 @@ public final class StraitLinks {
                 reason = matched ? nil : "no_match"
                 dest = matched ? destination(res.json["longUrl"] as? String) : .none
                 linkId = res.json["linkId"] as? String
+                if record && matched { noteTap(nil, at: t0) }
             }
             completion(emit(LinkEvent(
                 id: id, kind: .deferred, route: .fingerprint, appState: .closed, matched: matched, reason: reason,

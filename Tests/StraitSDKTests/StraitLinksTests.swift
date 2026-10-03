@@ -699,3 +699,82 @@ final class FirstLaunchTests: XCTestCase {
         XCTAssertNil(engine.calls(to: "/v1/match").first?.body?["at"])
     }
 }
+
+// MARK: - Contract B15: conversion events carry the tap id
+
+/// Port of the B15 tests in sdk-react-native/test/strait.test.ts. The Play
+/// referrer case is Android-only.
+private let TAP = "3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f"
+private let OTHER_TAP = "11111111-2222-4333-8444-555555555555"
+private let DAY: Double = 24 * 60 * 60 * 1000
+
+final class EventClickIdTests: XCTestCase {
+    private func lastEvent(_ engine: FakeEngine) -> [String: Any]? { engine.calls(to: "/v1/event").last?.body }
+
+    func testHandOffTapIsRememberedAndAttached() throws {
+        let engine = FakeEngine(["/v1/event": ["ok": true], "/v1/open": ["ok": true]])
+        let h = Harness(engine)
+        h.start("straitlink://shop.example/p/42?strait_click=\(TAP)")
+        h.clock.advance(DAY)
+        var ok: Bool?
+        h.strait.trackEvent("purchase", value: 5, currency: "USD") { ok = $0 }
+        XCTAssertEqual(ok, true)
+        XCTAssertEqual(lastEvent(engine)?["clickId"] as? String, TAP)
+        let stored = try XCTUnwrap(h.storage.getItem(StraitLinks.tapKey))
+        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(stored.utf8)) as? [String: Any])
+        XCTAssertEqual(obj["clickId"] as? String, TAP)
+        XCTAssertEqual(obj["at"] as? Double, 1_000_000)
+    }
+
+    func testNotAfterSevenDays() {
+        let engine = FakeEngine(["/v1/event": ["ok": true], "/v1/open": ["ok": true]])
+        let h = Harness(engine)
+        h.start("straitlink://shop.example/p/42?strait_click=\(TAP)")
+        h.clock.advance(7 * DAY + 1)
+        h.strait.trackEvent("purchase")
+        XCTAssertNotNil(lastEvent(engine))
+        XCTAssertNil(lastEvent(engine)?["clickId"])
+    }
+
+    func testExplicitClickIdOverrides() {
+        let engine = FakeEngine(["/v1/event": ["ok": true], "/v1/open": ["ok": true]])
+        let h = Harness(engine)
+        h.start("straitlink://shop.example/p/42?strait_click=\(TAP)")
+        h.strait.trackEvent("purchase", clickId: OTHER_TAP)
+        XCTAssertEqual(lastEvent(engine)?["clickId"] as? String, OTHER_TAP)
+    }
+
+    func testNoRememberedTap() {
+        let engine = FakeEngine(["/v1/event": ["ok": true], "/v1/match": ["matched": false]])
+        let h = Harness(engine)
+        h.start()
+        h.strait.trackEvent("signup")
+        XCTAssertNotNil(lastEvent(engine))
+        XCTAssertNil(lastEvent(engine)?["clickId"])
+    }
+
+    func testNewerShortLinkOpenForgetsOlderTap() {
+        var routes = resolved
+        routes["/v1/event"] = ["ok": true]
+        routes["/v1/open"] = ["ok": true]
+        let engine = FakeEngine(routes)
+        let h = Harness(engine)
+        h.start("straitlink://shop.example/p/42?strait_click=\(TAP)")
+        h.strait.handle(urlString: "https://links.test/sale")
+        h.strait.trackEvent("purchase")
+        XCTAssertNil(lastEvent(engine)?["clickId"])
+    }
+
+    func testFingerprintMatchForgetsOlderTap() {
+        let storage = MemoryStorage()
+        storage.setItem(StraitLinks.tapKey, rememberTap(TAP, at: 1_000_000))
+        let engine = FakeEngine([
+            "/v1/event": ["ok": true],
+            "/v1/match": ["matched": true, "longUrl": "https://shop.example/p/7", "linkId": "lnk_7"],
+        ])
+        let h = Harness(engine, storage: storage)
+        h.start()
+        h.strait.trackEvent("purchase")
+        XCTAssertNil(lastEvent(engine)?["clickId"])
+    }
+}

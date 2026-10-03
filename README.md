@@ -16,7 +16,7 @@ the server and every other SDK via [`shared-spec`](../shared-spec) golden vector
 Xcode: **File → Add Package Dependencies…** and paste the repo URL, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.5.0")
+.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.6.0")
 // target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
 <!-- /brand:install -->
@@ -127,6 +127,10 @@ strait.flushOpenReports { }              // send them now
 
 ```swift
 strait.trackEvent("purchase", value: 49.99, currency: "USD", linkId: event.linkId) { ok in }
+// The event carries the tap id of the last link open that had one (a browser
+// hand-off) for 7 days, so revenue lands on that tap's channel / A/B variant
+// (contract B15). A newer short-link or fingerprint open replaces it with none.
+// Pass `clickId:` to set it yourself.
 strait.reportFingerprint { json in }   // POST /v1/debug/fingerprint, origin "app"
 strait.compareFingerprint { json in }  // engine's app-vs-browser comparison
 strait.checkDeferred { event in }      // re-run the deferred check (debugging)
@@ -159,6 +163,7 @@ A `LinkStart` with the same `id` fires first, before any network call.
 | B12 `splitUrl` without `URLComponents` | ✓ |
 | B13 `trackEvent`, `reportFingerprint`, `compareFingerprint` | ✓ |
 | B14 every open reported once; offline reports queued and retried | ✓ (`pendingOpenReports`, `flushOpenReports`) |
+| B15 conversion events carry the tap id of the last attributed open (7 days; `clickId:` overrides) | ✓ (`strait.lastTap`) |
 
 Both `test-vectors.json` (signature) and `conformance-vectors.json` (pure
 helpers) run under `swift test` in CI.

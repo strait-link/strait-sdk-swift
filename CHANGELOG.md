@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0
+
+- Conversion events carry the tap id (shared-spec/SDK-CONTRACT.md B15): the tap id
+  of the last attributed link open (a browser hand-off `strait_click`) is remembered
+  under `strait.lastTap` and sent as `clickId` with `trackEvent` for 7 days. A newer
+  short-link or fingerprint open forgets it. `trackEvent(_, clickId:)` overrides it.
+- New core API: `eventClickId`, `rememberTap`, `ATTRIBUTION_WINDOW_MS`
+  (conformance vectors v3).
+
 ## 0.5.0
 
 **Renamed to Strait** (breaking, clean break; no aliases for the old names).

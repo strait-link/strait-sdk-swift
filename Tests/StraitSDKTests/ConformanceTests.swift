@@ -23,6 +23,18 @@ final class ConformanceTests: XCTestCase {
         XCTAssertEqual(c["TRANSIENT_PAUSE_MS"] as? Double, TRANSIENT_PAUSE_MS)
         XCTAssertEqual(c["OPEN_QUEUE_MAX"] as? Int, OPEN_QUEUE_MAX)
         XCTAssertEqual(c["OPEN_QUEUE_MAX_AGE_MS"] as? Double, OPEN_QUEUE_MAX_AGE_MS)
+        XCTAssertEqual(c["ATTRIBUTION_WINDOW_MS"] as? Double, ATTRIBUTION_WINDOW_MS)
+    }
+
+    func testEventClickId() throws {
+        for v in try cases("eventClickId") {
+            let name = try XCTUnwrap(v["name"] as? String)
+            let now = try XCTUnwrap(v["now"] as? Double, name)
+            XCTAssertEqual(
+                eventClickId(v["stored"] as? String, now: now, explicit: v["explicit"] as? String),
+                v["expected"] as? String, name
+            )
+        }
     }
 
     func testBrowserScreenWidth() throws {

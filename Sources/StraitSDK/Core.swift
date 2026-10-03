@@ -195,6 +195,36 @@ public func pruneOpenQueue<T>(_ queue: [T], now: Double, at: (T) -> Double) -> [
     Array(queue.filter { now - at($0) <= OPEN_QUEUE_MAX_AGE_MS }.suffix(OPEN_QUEUE_MAX))
 }
 
+/// Conversion events carry the tap id of the most recent attributed link open
+/// for this long, ms (contract B15).
+public let ATTRIBUTION_WINDOW_MS: Double = 7 * 24 * 60 * 60 * 1000
+
+/// Storage value for the remembered tap (key `strait.lastTap`):
+/// `{"clickId":…,"at":<epoch ms>}`.
+public func rememberTap(_ clickId: String, at: Double) -> String {
+    let obj: [String: Any] = ["clickId": clickId.lowercased(), "at": Int64(at)]
+    guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
+          let s = String(data: data, encoding: .utf8) else { return "" }
+    return s
+}
+
+/// The `clickId` a conversion event sends (contract B15): a non-empty
+/// `explicit` wins; otherwise the remembered tap (`stored`, see `rememberTap`)
+/// when it is a valid tap id opened at most `ATTRIBUTION_WINDOW_MS` before
+/// `now` (and not after it). Anything unreadable means no tap.
+public func eventClickId(_ stored: String?, now: Double, explicit: String? = nil) -> String? {
+    if let explicit = explicit, !explicit.isEmpty { return explicit }
+    guard let stored = stored, !stored.isEmpty, let data = stored.data(using: .utf8),
+          let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+          let clickId = obj["clickId"] as? String, isClickId(clickId),
+          let atNum = obj["at"] as? NSNumber, CFGetTypeID(atNum) != CFBooleanGetTypeID()
+    else { return nil }
+    let at = atNum.doubleValue
+    guard at.isFinite else { return nil }
+    let age = now - at
+    return age >= 0 && age <= ATTRIBUTION_WINDOW_MS ? clickId.lowercased() : nil
+}
+
 /// Whether a failed report should be kept for retry: no answer (nil), 429 or 5xx.
 public func shouldRetryReport(_ status: Int?) -> Bool {
     guard let status = status else { return true }
