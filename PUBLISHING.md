@@ -7,7 +7,7 @@ them into the README install block and LICENSE.
 
 ## One-time owner setup
 
-1. **Pick the brand.** From `strait/`: `shared-spec/scripts/rename-brand.sh … --final --apply`.
+1. **Pick the brand.** From the workspace root: `shared-spec/scripts/rename-brand.sh … --final --apply`.
    Rename/move the GitHub repo first if it will change — the URL *is* the package
    identity (`package: "<repo>"` in apps' manifests). GitHub redirects old URLs, but
    SwiftPM identity follows the last path component, so pick the final repo name
