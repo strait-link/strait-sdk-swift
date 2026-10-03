@@ -422,7 +422,7 @@ public final class StraitLinks {
             )
             let body: [String: Any] = [
                 "publishableKey": config.publishableKey, "url": raw, "platform": platform,
-                "openId": id, "appState": appState.rawValue, "firstLaunch": firstLaunch, "at": t0,
+                "openId": id, "appState": appState.rawValue, "firstLaunch": firstLaunch, "at": Int64(t0),
             ]
             call("POST", "/v1/resolve", body) { [self] r in
                 guard case let .success(res) = r else {
@@ -459,7 +459,7 @@ public final class StraitLinks {
         body["platform"] = config.platform
         if record {
             body["openId"] = id
-            body["at"] = t0
+            body["at"] = Int64(t0) // whole ms, like the other SDKs
         }
         call("POST", "/v1/match", body) { [self] r in
             // No answer, 429 or 5xx = try again next launch (reported as 'network').
@@ -513,7 +513,7 @@ public final class StraitLinks {
 
     private func enqueue(_ report: OpenReport) {
         serial { [self] done in
-            writeQueue(pruneOpenQueue(readQueue() + [report], now: config.now()) { $0.at })
+            writeQueue(pruneOpenQueue(readQueue() + [report], now: config.now()) { Double($0.at) })
             done()
         }
     }
@@ -548,7 +548,7 @@ public final class StraitLinks {
         }
         guard start else { return }
         serial { [self] done in
-            let queue = pruneOpenQueue(readQueue(), now: config.now()) { $0.at }
+            let queue = pruneOpenQueue(readQueue(), now: config.now()) { Double($0.at) }
             var keep: [OpenReport] = []
             func next(_ i: Int) {
                 guard i < queue.count else {
@@ -641,7 +641,7 @@ struct OpenReport: Codable {
     var matched: Bool
     var reason: String?
     var firstLaunch: Bool
-    var at: Double
+    var at: Int64 // whole ms
 
     init(
         openId: String, kind: LinkKind, route: LinkRoute, appState: AppStateAtLink, platform: String,
@@ -658,7 +658,7 @@ struct OpenReport: Codable {
         self.matched = matched
         self.reason = reason
         self.firstLaunch = firstLaunch
-        self.at = at
+        self.at = Int64(at)
     }
 }
 

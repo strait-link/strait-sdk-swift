@@ -669,6 +669,24 @@ final class FirstLaunchTests: XCTestCase {
         XCTAssertNil(storage.getItem("strait.deferredChecked"))
     }
 
+    func testTimestampsAreSentAsWholeMilliseconds() throws {
+        let engine = FakeEngine(["/v1/match": noMatch, "/v1/resolve": resolvedRecorded])
+        engine.modes["/v1/open"] = .offline
+        let h = Harness(engine)
+        h.clock.t = 1_800_000_000_123.75
+        h.start()
+        h.strait.handle(urlString: "https://links.test/sale")
+        h.strait.handle(urlString: "straitlink://a.b/1")
+        let bodies = [engine.calls(to: "/v1/match").first?.body, engine.calls(to: "/v1/resolve").first?.body,
+                      engine.calls(to: "/v1/open").first?.body]
+        for body in bodies {
+            let at = try XCTUnwrap(body?["at"] as? NSNumber)
+            XCTAssertEqual(at.doubleValue, 1_800_000_000_123)
+        }
+        let saved = try XCTUnwrap(h.storage.getItem("strait.pendingOpens"))
+        XCTAssertTrue(saved.contains("\"at\":1800000000123"), saved)
+    }
+
     func testDebugReCheckNeverRecordsAnInstall() {
         let engine = FakeEngine(["/v1/match": noMatch])
         let h = Harness(engine, storage: returning())

@@ -21,6 +21,9 @@
 - New pure helpers checked against `conformance-vectors.json` v2:
   `parseStraitClick`, `takeClickId`, `pruneOpenQueue`, `shouldRetryReport`,
   `newOpenId`, `OPEN_QUEUE_MAX`, `OPEN_QUEUE_MAX_AGE_MS`.
+- `at` is sent as whole milliseconds on `/v1/resolve`, `/v1/match` and `/v1/open`.
+- `StraitStorage.getItem` can't fail (it returns `String?`), so the RN rule
+  "unreadable storage = deferred already checked" has no Swift equivalent.
 
 ## 0.3.0
 
