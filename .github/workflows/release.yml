@@ -1,0 +1,23 @@
+name: Release
+# Swift Package Manager installs straight from git tags, so pushing vX.Y.Z IS the
+# release. This workflow proves the tag builds and passes tests on macOS and that
+# CHANGELOG.md has a "## X.Y.Z" entry. No secrets, nothing is uploaded.
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: CHANGELOG.md has an entry for this tag
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          grep -Eq "^## \[?${v//./\\.}\]?( |$)" CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## $v' entry"; exit 1; }
+      - run: swift package describe
+      - run: swift build -c release
+      - run: swift test
+      - run: node scripts/brand.mjs
+      - run: node scripts/brand.mjs --release

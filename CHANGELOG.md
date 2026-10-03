@@ -25,6 +25,14 @@
 - `StraitStorage.getItem` can't fail (it returns `String?`), so the RN rule
   "unreadable storage = deferred already checked" has no Swift equivalent.
 
+### Packaging
+
+- Ready for Swift Package Manager: a version tag `vX.Y.Z` is the release
+  (SwiftPM reads tags straight from the repo; no registry account). The release
+  workflow builds and tests the tag on macOS and checks this changelog names it.
+- The repo URL and copyright holder come from `brand.json` (README install block
+  + LICENSE applied by `scripts/brand.mjs`). MIT `LICENSE` added.
+
 ## 0.3.0
 
 - `StraitLinks` client at parity with the React Native SDK

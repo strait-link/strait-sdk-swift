@@ -12,9 +12,14 @@ the server and every other SDK via [`shared-spec`](../shared-spec) golden vector
 
 ## Install (Swift Package Manager)
 
+<!-- brand:install -->
+Xcode: **File → Add Package Dependencies…** and paste the repo URL, or in `Package.swift`:
+
 ```swift
 .package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.4.0")
+// target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
+<!-- /brand:install -->
 
 ## Use — `StraitLinks` (direct + deferred links, analytics)
 
