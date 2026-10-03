@@ -13,7 +13,7 @@ the server and every other SDK via [`shared-spec`](../shared-spec) golden vector
 ## Install (Swift Package Manager)
 
 ```swift
-.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.3.0")
+.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.4.0")
 ```
 
 ## Use — `StraitLinks` (direct + deferred links, analytics)
@@ -79,14 +79,41 @@ by app state rather than `closed`; if you need `closed` (and the first-launch
 deferred skip), adopt a `UIApplicationDelegateAdaptor`/scene delegate and pass
 the launch URL to `start(initialURL:)`.
 
+### What Strait records automatically (no extra code)
+
+Every time a link opens the app, the SDK reports it once (contract B14):
+
+| How the app opened | Reported via | Joined to |
+|---|---|---|
+| Universal Link tapped in WhatsApp, Gmail, Messages… | `/v1/resolve` (the lookup is the report) | the link; also counted as a tap |
+| Browser handed off to the app (`yourapp://…`) | `/v1/open` | the exact tap (`strait_click`, removed before your app sees the URL) |
+| First open after an App Store install | `/v1/match` | the matched tap |
+| Your own https links | `/v1/open` | host + path only (never the query) |
+
+Reports that can't be sent (offline, server busy) are saved in `storage`
+(`strait.pendingOpens`) and retried on the next `start`, whenever the app
+becomes active, and after any report that gets through, for up to 7 days
+(max 100). The engine de-duplicates by open id (`LinkEvent.id`), so nothing is
+counted twice. Navigation never waits for a report. The first launch of an
+install is marked as such, so dashboards can tell **new users** (installed and
+opened) from **existing users** (already had the app). The deferred check is
+only marked done once the server answered, so an offline first launch is
+retried on the next launch.
+
+```swift
+strait.pendingOpenReports { count in }   // saved reports waiting to be sent (debugging)
+strait.flushOpenReports { }              // send them now
+```
+
 ### Lifecycle and storage
 
 - `start` observes `UIApplication` didBecomeActive / willResignActive /
   didEnterBackground to label links `background` vs `foreground`. Set
   `observeLifecycle: false` and call `strait.onAppState(.active | .inactive | .background)`
   to feed it yourself. `stop()` removes the observers.
-- The once-per-install flag `strait.deferredChecked` lives in
-  `UserDefaults.standard` by default; pass any `StraitStorage` to change that.
+- The once-per-install flag `strait.deferredChecked` and the pending open
+  reports `strait.pendingOpens` live in `UserDefaults.standard` by default;
+  pass any `StraitStorage` to change that.
 - `transport:` (a `StraitTransport`, default `URLSession.shared`), `now:` and
   `device:` are injectable for tests. Callbacks run on the main queue
   (`callbackQueue: nil` runs them on whatever thread finished the work).
@@ -106,25 +133,27 @@ strait.checkDeferred { event in }      // re-run the deferred check (debugging)
 `fingerprint`) · `appState` (`closed`, `background`, `foreground`) · `matched` ·
 `reason` (`not_found`, `expired`, `password_protected`, `no_match`, `network`,
 `invalid_url`) · `rawUrl` · `url` · `path` · `params` · `linkId` · `ms` · `at`.
+`id` is the open id Strait records the open under (`o_<base36 ms>_<12 chars>`).
 A `LinkStart` with the same `id` fires first, before any network call.
 
 ## Behaviours (shared-spec/SDK-CONTRACT.md)
 
 | # | Status |
 |---|---|
-| B1 publishableKey in every body | ✓ (`/v1/match`, `/v1/resolve`, `/v1/event`, `/v1/debug/fingerprint`; GET compare sends it as a query param) |
+| B1 publishableKey in every body | ✓ (`/v1/match`, `/v1/resolve`, `/v1/open`, `/v1/event`, `/v1/debug/fingerprint`; GET compare sends it as a query param) |
 | B2 `screenWidth = browserScreenWidth(UIScreen.main.bounds.width)` | ✓ |
 | B3 short links on link hosts → `POST /v1/resolve {publishableKey,url,platform:'ios'}` | ✓ (hosts via `normalizeLinkHosts`) |
-| B4 custom scheme / https classification (`classifyUrl`) | ✓ |
+| B4 custom scheme / https classification (`classifyUrl`), `strait_click` removed (`takeClickId`) | ✓ |
 | B5 app-state labels (`AppStateTracker`, 2000/1000 ms) | ✓ |
-| B6 deferred once per install, skipped-but-marked when launched by a link | ✓ |
-| B7 Android Play Install Referrer | n/a on iOS (`parseStraitLink` is ported for parity) |
-| B8 iOS deferred `POST /v1/match` with device fields | ✓ |
+| B6 deferred once per install, skipped-but-marked when launched by a link; marked only once the engine answered | ✓ |
+| B7 Android Play Install Referrer | n/a on iOS (`parseStraitLink` / `parseStraitClick` are ported for parity) |
+| B8 iOS deferred `POST /v1/match` with device fields + `openId`, `at` | ✓ |
 | B9 one event type, replay, start signal | ✓ |
 | B10 never throws; network → `matched:false, reason:'network'` | ✓ |
 | B11 JSON via `JSONSerialization` | ✓ |
 | B12 `splitUrl` without `URLComponents` | ✓ |
 | B13 `trackEvent`, `reportFingerprint`, `compareFingerprint` | ✓ |
+| B14 every open reported once; offline reports queued and retried | ✓ (`pendingOpenReports`, `flushOpenReports`) |
 
 Both `test-vectors.json` (signature) and `conformance-vectors.json` (pure
 helpers) run under `swift test` in CI.

@@ -9,8 +9,13 @@ private let PK = "bk_pub_test_appowner01"
 private let ENDPOINT = "https://links.test"
 private let device = DeviceFields(screenWidth: 411, pixelRatio: 2.625, language: "en", timezone: "Asia/Kolkata")
 
-/// Fake engine: routes by path, records every call.
+/// Fake engine: routes by path, records every call. `modes` overrides how a
+/// path answers (offline, never, or a status code) and can change mid-test.
 final class FakeEngine: StraitTransport {
+    enum Mode {
+        case offline, hang
+        case status(Int)
+    }
     struct Call {
         let method: String
         let path: String
@@ -19,6 +24,7 @@ final class FakeEngine: StraitTransport {
     }
     var routes: [String: [String: Any]]
     var offline = false
+    var modes: [String: Mode] = [:]
     var calls: [Call] = []
 
     init(_ routes: [String: [String: Any]] = [:]) { self.routes = routes }
@@ -28,6 +34,14 @@ final class FakeEngine: StraitTransport {
         let body = request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
         calls.append(Call(method: request.httpMethod ?? "GET", path: url.path, query: url.query, body: body))
         if offline { return completion(.failure(URLError(.notConnectedToInternet))) }
+        switch modes[url.path] {
+        case .offline?: return completion(.failure(URLError(.notConnectedToInternet)))
+        case .hang?: return
+        case let .status(code)?:
+            let payload = routes[url.path] ?? [:]
+            return completion(.success(StraitHTTPResponse(status: code, data: try! JSONSerialization.data(withJSONObject: payload))))
+        case nil: break
+        }
         guard let payload = routes[url.path] else {
             return completion(.success(StraitHTTPResponse(status: 404, data: Data())))
         }
@@ -403,5 +417,267 @@ final class FingerprintAndEventTests: XCTestCase {
         let rejected = Harness(FakeEngine()) // 404
         rejected.strait.trackEvent("purchase") { ok = $0 }
         XCTAssertEqual(ok, false)
+    }
+}
+
+// MARK: - Contract B14: every link open reported exactly once (+ B6 revision)
+
+/// Port of sdk-react-native/test/opens.test.ts. The Play Install Referrer case
+/// (B7) is Android-only and has no iOS equivalent.
+private let CLICK = "3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f"
+private let accepted: [String: Any] = ["ok": true, "duplicate": false]
+private let resolvedRecorded: [String: Any] = [
+    "matched": true, "longUrl": "https://shop.example/p/42", "linkId": "lnk_42", "slug": "sale", "recorded": true,
+]
+private let noMatch: [String: Any] = ["matched": false, "matchMethod": "none"]
+
+private func returning() -> MemoryStorage {
+    let s = MemoryStorage()
+    s.setItem("strait.deferredChecked", "1") // not the first launch
+    return s
+}
+
+private func isOpenId(_ id: String) -> Bool {
+    id.range(of: "^o_[a-z0-9]+_[a-z0-9]{12}$", options: .regularExpression) != nil
+}
+
+private func pending(_ h: Harness) -> Int {
+    var n = -1
+    h.strait.pendingOpenReports { n = $0 }
+    return n
+}
+
+final class HandOffOpenTests: XCTestCase {
+    func testReportsOpenWithTapIdAppNeverSeesIt() throws {
+        let engine = FakeEngine(["/v1/open": accepted])
+        engine.modes["/v1/open"] = .status(202)
+        let h = Harness(engine, storage: returning())
+        h.start()
+        h.strait.onAppState(.background); h.clock.advance(5000); h.strait.onAppState(.active); h.clock.advance(200)
+        h.strait.handle(urlString: "straitlink://shop.example/p/42?color=red&strait_click=\(CLICK)")
+        let e = try XCTUnwrap(h.events.last)
+        XCTAssertEqual(e.route, .customScheme)
+        XCTAssertEqual(e.url, "https://shop.example/p/42?color=red")
+        XCTAssertEqual(e.params, ["color": "red"])
+        XCTAssertEqual(e.appState, .background)
+        XCTAssertTrue(isOpenId(e.id), e.id)
+        let opens = engine.calls(to: "/v1/open")
+        XCTAssertEqual(opens.count, 1)
+        let body = try XCTUnwrap(opens.first?.body)
+        XCTAssertEqual(body["publishableKey"] as? String, PK)
+        XCTAssertEqual(body["openId"] as? String, e.id)
+        XCTAssertEqual(body["kind"] as? String, "direct")
+        XCTAssertEqual(body["route"] as? String, "custom_scheme")
+        XCTAssertEqual(body["appState"] as? String, "background")
+        XCTAssertEqual(body["platform"] as? String, "ios")
+        XCTAssertEqual(body["url"] as? String, "https://shop.example/p/42?color=red")
+        XCTAssertEqual(body["clickId"] as? String, CLICK)
+        XCTAssertEqual(body["matched"] as? Bool, true)
+        XCTAssertEqual(body["firstLaunch"] as? Bool, false)
+        XCTAssertEqual(body["at"] as? Double, e.at)
+    }
+
+    func testNavigationNeverWaitsForTheReport() {
+        let engine = FakeEngine()
+        engine.modes["/v1/open"] = .hang
+        let h = Harness(engine, storage: returning())
+        h.start("straitlink://shop.example/p/1?strait_click=\(CLICK)")
+        XCTAssertEqual(h.events.count, 1)
+        XCTAssertEqual(h.events.first?.url, "https://shop.example/p/1")
+    }
+
+    func testOwnHttpsLinkIsReportedWithoutTapId() throws {
+        let engine = FakeEngine(["/v1/open": accepted])
+        let h = Harness(engine, storage: returning())
+        h.start("https://shop.example/p/9")
+        let body = try XCTUnwrap(engine.calls(to: "/v1/open").first?.body)
+        XCTAssertEqual(body["route"] as? String, "app_link")
+        XCTAssertEqual(body["url"] as? String, "https://shop.example/p/9")
+        XCTAssertEqual(body["appState"] as? String, "closed")
+        XCTAssertNil(body["clickId"])
+    }
+}
+
+final class ShortLinkOpenTests: XCTestCase {
+    func testResolveCarriesOpenIdAndNothingElseOnceRecorded() throws {
+        let engine = FakeEngine(["/v1/resolve": resolvedRecorded, "/v1/open": accepted])
+        let h = Harness(engine, storage: returning())
+        h.start("https://links.test/sale")
+        let e = try XCTUnwrap(h.events.first)
+        let body = try XCTUnwrap(engine.calls(to: "/v1/resolve").first?.body)
+        XCTAssertEqual(body["openId"] as? String, e.id)
+        XCTAssertEqual(body["appState"] as? String, "closed")
+        XCTAssertEqual(body["firstLaunch"] as? Bool, false)
+        XCTAssertEqual(body["at"] as? Double, e.at)
+        XCTAssertTrue(engine.calls(to: "/v1/open").isEmpty)
+    }
+
+    func testNotRecordedIsRetriedViaOpenWithSameOpenId() throws {
+        var notRecorded = resolvedRecorded
+        notRecorded["recorded"] = false
+        let engine = FakeEngine(["/v1/resolve": notRecorded, "/v1/open": accepted])
+        let h = Harness(engine, storage: returning())
+        h.start("https://links.test/sale")
+        let e = try XCTUnwrap(h.events.first)
+        XCTAssertTrue(e.matched)
+        let body = try XCTUnwrap(engine.calls(to: "/v1/open").first?.body)
+        XCTAssertEqual(body["openId"] as? String, e.id)
+        XCTAssertEqual(body["route"] as? String, "app_link")
+        XCTAssertEqual(body["url"] as? String, "https://links.test/sale")
+        XCTAssertEqual(body["matched"] as? Bool, true)
+        XCTAssertEqual(body["linkId"] as? String, "lnk_42")
+    }
+
+    func testOfflineSavedThenSentWhenAppComesBack() throws {
+        let engine = FakeEngine()
+        engine.modes = ["/v1/resolve": .offline, "/v1/open": .offline]
+        let h = Harness(engine, storage: returning())
+        h.start()
+        h.strait.handle(urlString: "https://links.test/sale")
+        let e = try XCTUnwrap(h.events.last)
+        XCTAssertFalse(e.matched)
+        XCTAssertEqual(e.reason, "network")
+        XCTAssertEqual(pending(h), 1)
+        // network returns; user leaves and comes back
+        engine.routes["/v1/open"] = accepted
+        engine.modes["/v1/open"] = .status(202)
+        h.strait.onAppState(.background); h.clock.advance(10_000); h.strait.onAppState(.active)
+        let sent = engine.calls(to: "/v1/open").filter { $0.body?["openId"] as? String == e.id }
+        let body = try XCTUnwrap(sent.last?.body)
+        XCTAssertEqual(body["route"] as? String, "app_link")
+        XCTAssertEqual(body["url"] as? String, "https://links.test/sale")
+        XCTAssertEqual(body["matched"] as? Bool, false)
+        XCTAssertEqual(body["reason"] as? String, "network")
+        XCTAssertEqual(pending(h), 0)
+    }
+}
+
+final class OpenQueueTests: XCTestCase {
+    func testKeepsOn5xxAnd429DropsOn4xx() {
+        let engine = FakeEngine()
+        engine.modes["/v1/open"] = .status(503)
+        let h = Harness(engine, storage: returning())
+        h.start()
+        h.strait.handle(urlString: "straitlink://a.b/1")
+        XCTAssertEqual(pending(h), 1)
+        engine.modes["/v1/open"] = .status(429)
+        var flushed = false
+        h.strait.flushOpenReports { flushed = true }
+        XCTAssertTrue(flushed)
+        XCTAssertEqual(pending(h), 1)
+        engine.routes["/v1/open"] = ["error": "bad"]
+        engine.modes["/v1/open"] = .status(400)
+        h.strait.flushOpenReports()
+        XCTAssertEqual(pending(h), 0)
+    }
+
+    func testSurvivesRestartAndIsSentOnNextStart() {
+        let storage = returning()
+        let e1 = FakeEngine()
+        e1.modes["/v1/open"] = .offline
+        let first = Harness(e1, storage: storage)
+        first.start()
+        first.strait.handle(urlString: "straitlink://a.b/1")
+        first.strait.handle(urlString: "straitlink://a.b/2")
+        XCTAssertEqual(pending(first), 2)
+        XCTAssertNotNil(storage.getItem("strait.pendingOpens"))
+        first.strait.stop()
+
+        let e2 = FakeEngine(["/v1/open": accepted])
+        let second = Harness(e2, storage: storage)
+        second.start()
+        XCTAssertEqual(e2.calls(to: "/v1/open").map { $0.body?["url"] as? String }, ["https://a.b/1", "https://a.b/2"])
+        XCTAssertEqual(pending(second), 0)
+    }
+
+    func testSuccessfulReportAlsoSendsEarlierOnes() {
+        let engine = FakeEngine()
+        engine.modes["/v1/open"] = .offline
+        let h = Harness(engine, storage: returning())
+        h.start()
+        h.strait.handle(urlString: "straitlink://a.b/old")
+        engine.routes["/v1/open"] = accepted
+        engine.modes["/v1/open"] = nil
+        h.strait.handle(urlString: "straitlink://a.b/new")
+        XCTAssertEqual(pending(h), 0)
+        let oldIds = Set(engine.calls(to: "/v1/open").filter { $0.body?["url"] as? String == "https://a.b/old" }
+            .compactMap { $0.body?["openId"] as? String })
+        XCTAssertEqual(oldIds.count, 1)
+    }
+
+    func testEveryOpenHasItsOwnId() {
+        let h = Harness(FakeEngine(["/v1/open": accepted]), storage: returning())
+        h.start()
+        for i in 0..<5 { h.strait.handle(urlString: "straitlink://a.b/\(i)") }
+        XCTAssertEqual(Set(h.events.map(\.id)).count, 5)
+    }
+}
+
+final class FirstLaunchTests: XCTestCase {
+    func testFirstLaunchOpenedByLinkCountsAsInstall() throws {
+        let engine = FakeEngine(["/v1/resolve": resolvedRecorded])
+        let h = Harness(engine)
+        h.start("https://links.test/sale")
+        XCTAssertEqual(engine.calls(to: "/v1/resolve").first?.body?["firstLaunch"] as? Bool, true)
+        XCTAssertTrue(engine.calls(to: "/v1/referrer").isEmpty)
+        XCTAssertTrue(engine.calls(to: "/v1/match").isEmpty)
+        XCTAssertEqual(h.storage.getItem("strait.deferredChecked"), "1")
+    }
+
+    func testFingerprintSendsOpenId() throws {
+        let engine = FakeEngine(["/v1/match": noMatch])
+        let h = Harness(engine)
+        h.start()
+        let e = try XCTUnwrap(h.events.first)
+        let body = try XCTUnwrap(engine.calls(to: "/v1/match").first?.body)
+        XCTAssertEqual(body["openId"] as? String, e.id)
+        XCTAssertEqual(body["at"] as? Double, e.at)
+        XCTAssertEqual(body["platform"] as? String, "ios")
+        XCTAssertEqual(body["screenWidth"] as? Int, 411)
+        XCTAssertEqual(body["pixelRatio"] as? Double, 2.625)
+        XCTAssertEqual(body["language"] as? String, "en")
+        XCTAssertEqual(body["timezone"] as? String, "Asia/Kolkata")
+    }
+
+    func testOfflineNotMarkedDoneSoNextLaunchChecksAgain() throws {
+        let storage = MemoryStorage()
+        let e1 = FakeEngine()
+        e1.modes["/v1/match"] = .offline
+        let first = Harness(e1, storage: storage)
+        first.start()
+        XCTAssertEqual(first.events.first?.kind, .deferred)
+        XCTAssertEqual(first.events.first?.reason, "network")
+        XCTAssertNil(storage.getItem("strait.deferredChecked"))
+
+        let e2 = FakeEngine(["/v1/match": noMatch])
+        Harness(e2, storage: storage).start()
+        XCTAssertEqual(e2.calls(to: "/v1/match").count, 1)
+        XCTAssertEqual(storage.getItem("strait.deferredChecked"), "1")
+
+        let e3 = FakeEngine(["/v1/match": noMatch])
+        Harness(e3, storage: storage).start()
+        XCTAssertTrue(e3.calls(to: "/v1/match").isEmpty) // once per install
+    }
+
+    func testServerErrorCountsAsNotAnswered() {
+        let storage = MemoryStorage()
+        let engine = FakeEngine()
+        engine.modes["/v1/match"] = .status(502)
+        let h = Harness(engine, storage: storage)
+        h.start()
+        XCTAssertEqual(h.events.first?.reason, "network")
+        XCTAssertNil(storage.getItem("strait.deferredChecked"))
+    }
+
+    func testDebugReCheckNeverRecordsAnInstall() {
+        let engine = FakeEngine(["/v1/match": noMatch])
+        let h = Harness(engine, storage: returning())
+        h.start()
+        var got: LinkEvent?
+        h.strait.checkDeferred { got = $0 }
+        XCTAssertNotNil(got)
+        XCTAssertEqual(engine.calls(to: "/v1/match").count, 1)
+        XCTAssertNil(engine.calls(to: "/v1/match").first?.body?["openId"])
+        XCTAssertNil(engine.calls(to: "/v1/match").first?.body?["at"])
     }
 }

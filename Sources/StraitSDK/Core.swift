@@ -97,38 +97,117 @@ public func normalizeLinkHosts(_ endpoint: String, _ linkHosts: [String] = []) -
 
 /// The `strait_link` id inside a Play Install Referrer string, or nil.
 public func parseStraitLink(_ referrer: String?) -> String? {
+    referrerParam(referrer, "strait_link")
+}
+
+/// The tap id (`strait_click`) inside a Play Install Referrer string, or nil.
+/// Joins the install to the exact tap that sent the user to the store.
+public func parseStraitClick(_ referrer: String?) -> String? {
+    guard let v = referrerParam(referrer, "strait_click"), isClickId(v) else { return nil }
+    return v
+}
+
+private func referrerParam(_ referrer: String?, _ key: String) -> String? {
     guard let referrer = referrer, !referrer.isEmpty else { return nil }
     for pair in referrer.components(separatedBy: "&") {
-        guard let eq = pair.range(of: "="), pair[..<eq.lowerBound] == "strait_link" else { continue }
+        guard let eq = pair.range(of: "="), pair[..<eq.lowerBound] == key else { continue }
         let v = decode(String(pair[eq.upperBound...]))
         return v.isEmpty ? nil : v
     }
     return nil
 }
 
+/// A tap id as Strait issues it (uuid); anything else is ignored.
+private let clickIdPattern = try! NSRegularExpression(
+    pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\z", options: [.caseInsensitive]
+)
+
+private func isClickId(_ v: String) -> Bool {
+    clickIdPattern.firstMatch(in: v, range: NSRange(location: 0, length: (v as NSString).length)) != nil
+}
+
+/// A URL with its `strait_click` tap id taken out (`takeClickId`).
+public struct ClickIdSplit: Equatable {
+    public let url: String
+    /// The tap id, lower-cased; nil when absent or malformed.
+    public let clickId: String?
+}
+
+/// Remove every `strait_click` parameter from a URL's query, keeping the rest
+/// of the URL byte-for-byte (fragment included). Returns the cleaned URL and
+/// the tap id (nil when absent or malformed). The app never sees the tap id.
+public func takeClickId(_ raw: String) -> ClickIdSplit {
+    let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    let hash = s.firstIndex(of: "#")
+    let beforeHash = hash.map { String(s[..<$0]) } ?? s
+    let frag = hash.map { String(s[$0...]) } ?? ""
+    guard let q = beforeHash.firstIndex(of: "?") else { return ClickIdSplit(url: s, clickId: nil) }
+    var clickId: String?
+    let kept = beforeHash[beforeHash.index(after: q)...].components(separatedBy: "&").filter { pair in
+        let eq = pair.range(of: "=")
+        let key = eq.map { String(pair[..<$0.lowerBound]) } ?? pair
+        if decode(key) != "strait_click" { return true }
+        let v = decode(eq.map { String(pair[$0.upperBound...]) } ?? "")
+        if isClickId(v) { clickId = v.lowercased() }
+        return false
+    }
+    let query = kept.joined(separator: "&")
+    return ClickIdSplit(url: String(beforeHash[..<q]) + (query.isEmpty ? "" : "?" + query) + frag, clickId: clickId)
+}
+
 /// What a URL handed to the app means.
 public enum ClassifiedUrl: Equatable {
     /// https on a Strait link host → a short link; ask /v1/resolve (route `app_link`).
     case shortLink
-    /// The URL already carries the destination.
-    case destination(route: LinkRoute, url: String, path: String, params: [String: String])
+    /// The URL already carries the destination. `clickId` is the tap id from a
+    /// Strait hand-off (removed from url/params), else nil.
+    case destination(route: LinkRoute, url: String, path: String, params: [String: String], clickId: String?)
 }
 
 /// - https on a Strait link host → `.shortLink`.
 /// - other https (a verified link on the customer's own site) → it IS the destination.
 /// - yourapp://host/path (browser hand-off) → destination https://host/path.
+/// A `strait_click` tap id is removed from the destination and returned apart.
 /// Returns nil for anything that isn't a URL.
 public func classifyUrl(_ raw: String, linkHosts: [String]) -> ClassifiedUrl? {
-    guard let p = splitUrl(raw) else { return nil }
-    let isWeb = p.scheme == "https" || p.scheme == "http"
-    if isWeb && linkHosts.map({ $0.lowercased() }).contains(p.host) {
+    guard let p0 = splitUrl(raw) else { return nil }
+    let isWeb = p0.scheme == "https" || p0.scheme == "http"
+    if isWeb && linkHosts.map({ $0.lowercased() }).contains(p0.host) {
         return .shortLink
     }
-    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    let url = isWeb ? trimmed : schemePrefix.stringByReplacingMatches(
-        in: trimmed, range: NSRange(location: 0, length: (trimmed as NSString).length), withTemplate: "https://"
+    let taken = takeClickId(raw)
+    let clean = taken.url
+    guard let p = splitUrl(clean) else { return nil }
+    let url = isWeb ? clean : schemePrefix.stringByReplacingMatches(
+        in: clean, range: NSRange(location: 0, length: (clean as NSString).length), withTemplate: "https://"
     )
-    return .destination(route: isWeb ? .appLink : .customScheme, url: url, path: p.path, params: p.params)
+    return .destination(route: isWeb ? .appLink : .customScheme, url: url, path: p.path, params: p.params, clickId: taken.clickId)
+}
+
+/// Open reports waiting to be sent are kept at most this long (ms)…
+public let OPEN_QUEUE_MAX_AGE_MS: Double = 7 * 24 * 60 * 60 * 1000
+/// …and at most this many (oldest dropped first).
+public let OPEN_QUEUE_MAX = 100
+
+/// Prune a pending-report queue: drop reports older than `OPEN_QUEUE_MAX_AGE_MS`
+/// (by their `at`), then keep the newest `OPEN_QUEUE_MAX`. Order is kept.
+public func pruneOpenQueue<T>(_ queue: [T], now: Double, at: (T) -> Double) -> [T] {
+    Array(queue.filter { now - at($0) <= OPEN_QUEUE_MAX_AGE_MS }.suffix(OPEN_QUEUE_MAX))
+}
+
+/// Whether a failed report should be kept for retry: no answer (nil), 429 or 5xx.
+public func shouldRetryReport(_ status: Int?) -> Bool {
+    guard let status = status else { return true }
+    return status == 429 || status >= 500
+}
+
+/// A unique id for one link open (the engine de-duplicates retries by it):
+/// `o_<base36 ms>_<12 × [a-z0-9]>`.
+public func newOpenId(_ now: Double, random: () -> Double = { Double.random(in: 0..<1) }) -> String {
+    let alphabet = Array("abcdefghijklmnopqrstuvwxyz0123456789")
+    var r = ""
+    for _ in 0..<12 { r.append(alphabet[min(35, Int(random() * 36))]) }
+    return "o_\(String(Int64(now), radix: 36))_\(r)"
 }
 
 /// A link arriving this soon after the app came back to the front came "from background".

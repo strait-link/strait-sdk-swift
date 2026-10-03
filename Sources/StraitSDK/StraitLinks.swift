@@ -47,7 +47,8 @@ public struct LinkStart: Equatable {
     public let at: Double
 }
 
-/// Persistent key/value storage for the once-per-install flag.
+/// Persistent key/value storage for the once-per-install flag and the
+/// pending open reports.
 public protocol StraitStorage {
     func getItem(_ key: String) -> String?
     func setItem(_ key: String, _ value: String)
@@ -121,7 +122,7 @@ public struct StraitLinksConfig {
     /// Extra hosts that serve your short links (custom domains), as
     /// `https://go.brand.com` or `go.brand.com`.
     public var linkHosts: [String]
-    /// Persists `strait.deferredChecked`. Default: `UserDefaults.standard`.
+    /// Persists `strait.deferredChecked` and `strait.pendingOpens`. Default: `UserDefaults.standard`.
     public var storage: StraitStorage
     public var transport: StraitTransport
     /// Clock in ms since 1970.
@@ -172,6 +173,8 @@ enum StraitLinksError: Error {
 /// Native `createStrait`; never throws to the app.
 public final class StraitLinks {
     public static let deferredFlag = "strait.deferredChecked"
+    /// Open reports that didn't get through, retried later (JSON array).
+    public static let queueKey = "strait.pendingOpens"
 
     private let config: StraitLinksConfig
     private let base: String
@@ -182,7 +185,11 @@ public final class StraitLinks {
     private var listeners: [(Int, (LinkEvent) -> Void)] = []
     private var startListeners: [(Int, (LinkStart) -> Void)] = []
     private var nextToken = 0
-    private var seq = 0
+    /// Queue operations waiting to run, one at a time (see `serial`).
+    private var queueOps: [(@escaping () -> Void) -> Void] = []
+    private var queueBusy = false
+    /// Completions of the flush that's queued or running, nil when none.
+    private var flushWaiters: [() -> Void]?
     private var observers: [NSObjectProtocol] = []
 
     public init(_ config: StraitLinksConfig) {
@@ -200,24 +207,27 @@ public final class StraitLinks {
     /// Handles the launch link (pass the URL that launched the app from closed,
     /// e.g. from `connectionOptions` in `scene(_:willConnectTo:options:)`), then
     /// runs the deferred check once per install — skipped (but marked done)
-    /// when the launch itself was a link.
+    /// when the launch itself was a link — and sends any saved open reports.
     public func start(initialURL: URL? = nil, completion: (() -> Void)? = nil) {
         if config.observeLifecycle { observeAppLifecycle() }
-        let deferredStep = { [self] in
-            if config.storage.getItem(Self.deferredFlag) != "1" {
-                config.storage.setItem(Self.deferredFlag, "1")
-                // Opened by a link on first launch = the user's intent right now.
-                if initialURL == nil {
-                    runDeferred { [self] _ in deliver { completion?() } }
-                    return
-                }
-            }
+        let firstLaunch = config.storage.getItem(Self.deferredFlag) != "1"
+        let finish = { [self] in
+            flush(completion: nil)
             deliver { completion?() }
         }
         if let initial = initialURL {
-            handleUrl(initial.absoluteString, appState: .closed) { _ in deferredStep() }
+            // Opened by a link on first launch = the user's intent right now: no
+            // deferred check, but this open still counts as the install's first.
+            if firstLaunch { config.storage.setItem(Self.deferredFlag, "1") }
+            handleUrl(initial.absoluteString, appState: .closed, firstLaunch: firstLaunch) { _ in finish() }
+        } else if firstLaunch {
+            // Marked done only once the engine answered: offline → next launch.
+            runDeferred(record: true) { [self] e in
+                if e.reason != "network" { config.storage.setItem(Self.deferredFlag, "1") }
+                finish()
+            }
         } else {
-            deferredStep()
+            finish()
         }
     }
 
@@ -231,7 +241,7 @@ public final class StraitLinks {
 
     public func handle(urlString: String) {
         let appState = withLock { tracker.classify(config.now()) }
-        handleUrl(urlString, appState: appState, completion: nil)
+        handleUrl(urlString, appState: appState, firstLaunch: false, completion: nil)
     }
 
     /// Universal Link via `NSUserActivity`. Returns false when the activity
@@ -248,6 +258,7 @@ public final class StraitLinks {
     public func onAppState(_ state: AppLifecycleState, at: Double? = nil) {
         let now = at ?? config.now()
         withLock { tracker.onState(state, now: now) }
+        if state == .active { flush(completion: nil) }
     }
 
     /// Observe UIApplication notifications (called by `start` unless
@@ -315,7 +326,7 @@ public final class StraitLinks {
 
     /// Re-run the deferred check now (debugging); doesn't touch the once-per-install flag.
     public func checkDeferred(completion: ((LinkEvent) -> Void)? = nil) {
-        runDeferred { [self] e in deliver { completion?(e) } }
+        runDeferred(record: false) { [self] e in deliver { completion?(e) } }
     }
 
     /// Send this app's fingerprint to the engine (debug comparison with the browser).
@@ -360,11 +371,28 @@ public final class StraitLinks {
         }
     }
 
+    // MARK: Open reports (B14)
+
+    /// Open reports saved while offline, waiting to be sent (debugging).
+    public func pendingOpenReports(completion: @escaping (Int) -> Void) {
+        serial { [self] done in
+            let n = readQueue().count
+            done()
+            deliver { completion(n) }
+        }
+    }
+
+    /// Send saved open reports now (also happens on start and whenever the app becomes active).
+    public func flushOpenReports(completion: (() -> Void)? = nil) {
+        flush { [self] in deliver { completion?() } }
+    }
+
     // MARK: Internals
 
-    private func handleUrl(_ raw: String, appState: AppStateAtLink, completion: ((LinkEvent) -> Void)?) {
+    private func handleUrl(_ raw: String, appState: AppStateAtLink, firstLaunch: Bool, completion: ((LinkEvent) -> Void)?) {
         let t0 = config.now()
-        let id = newId(t0)
+        let id = newOpenId(t0)
+        let platform = config.platform
         announce(LinkStart(id: id, kind: .direct, appState: appState, rawUrl: raw, at: t0))
         let done = { [self] (route: LinkRoute, matched: Bool, reason: String?, dest: Destination, linkId: String?) in
             let e = emit(LinkEvent(
@@ -378,36 +406,65 @@ public final class StraitLinks {
             return done(.appLink, false, "invalid_url", .none, nil)
         }
         switch c {
-        case let .destination(route, url, path, params):
+        case let .destination(route, url, path, params, clickId):
+            // Navigation never waits for the report.
+            report(OpenReport(
+                openId: id, kind: .direct, route: route, appState: appState, platform: platform, url: url,
+                clickId: clickId, linkId: nil, matched: true, reason: nil, firstLaunch: firstLaunch, at: t0
+            ))
             done(route, true, nil, Destination(url: url, path: path, params: params), nil)
         case .shortLink:
-            let body: [String: Any] = ["publishableKey": config.publishableKey, "url": raw, "platform": config.platform]
-            call("POST", "/v1/resolve", body) { r in
+            // The lookup is also the open report (openId); the engine says whether
+            // it recorded it, and anything short of that is retried via /v1/open.
+            let base = OpenReport(
+                openId: id, kind: .direct, route: .appLink, appState: appState, platform: platform, url: raw,
+                clickId: nil, linkId: nil, matched: false, reason: nil, firstLaunch: firstLaunch, at: t0
+            )
+            let body: [String: Any] = [
+                "publishableKey": config.publishableKey, "url": raw, "platform": platform,
+                "openId": id, "appState": appState.rawValue, "firstLaunch": firstLaunch, "at": t0,
+            ]
+            call("POST", "/v1/resolve", body) { [self] r in
                 guard case let .success(res) = r else {
+                    var failed = base
+                    failed.reason = "network"
+                    enqueue(failed)
                     return done(.appLink, false, "network", .none, nil)
                 }
                 let json = res.json
                 let matched = (json["matched"] as? Bool) == true
-                done(
-                    .appLink, matched,
-                    matched ? nil : (json["reason"] as? String) ?? (json["error"] as? String),
-                    matched ? destination(json["longUrl"] as? String) : .none,
-                    json["linkId"] as? String
-                )
+                let reason = matched ? nil : (json["reason"] as? String) ?? (json["error"] as? String)
+                let linkId = json["linkId"] as? String
+                if (json["recorded"] as? Bool) != true {
+                    var rep = base
+                    rep.matched = matched
+                    rep.reason = reason
+                    rep.linkId = linkId
+                    report(rep)
+                }
+                done(.appLink, matched, reason, matched ? destination(json["longUrl"] as? String) : .none, linkId)
             }
         }
     }
 
-    private func runDeferred(completion: @escaping (LinkEvent) -> Void) {
+    /// The deferred check. `record` (the once-per-install run) sends the openId so
+    /// the engine records this first open + install exactly once; the debug
+    /// re-check doesn't, so it never adds installs.
+    private func runDeferred(record: Bool, completion: @escaping (LinkEvent) -> Void) {
         let t0 = config.now()
-        let id = newId(t0)
+        let id = newOpenId(t0)
         announce(LinkStart(id: id, kind: .deferred, appState: .closed, rawUrl: nil, at: t0))
         var body = config.device().json
         body["publishableKey"] = config.publishableKey
         body["platform"] = config.platform
+        if record {
+            body["openId"] = id
+            body["at"] = t0
+        }
         call("POST", "/v1/match", body) { [self] r in
+            // No answer, 429 or 5xx = try again next launch (reported as 'network').
             var matched = false, reason: String? = "network", dest = Destination.none, linkId: String?
-            if case let .success(res) = r {
+            if case let .success(res) = r, !shouldRetryReport(res.status) {
                 matched = (res.json["matched"] as? Bool) == true
                 reason = matched ? nil : "no_match"
                 dest = matched ? destination(res.json["longUrl"] as? String) : .none
@@ -418,6 +475,104 @@ public final class StraitLinks {
                 rawUrl: nil, url: dest.url, path: dest.path, params: dest.params, linkId: linkId,
                 ms: config.now() - t0, at: t0
             )))
+        }
+    }
+
+    /// Run queue operations one at a time (each calls `done` when finished),
+    /// so a flush and a new report never overwrite each other's writes.
+    private func serial(_ op: @escaping (@escaping () -> Void) -> Void) {
+        let start: Bool = withLock {
+            queueOps.append(op)
+            if queueBusy { return false }
+            queueBusy = true
+            return true
+        }
+        if start { runNextOp() }
+    }
+
+    private func runNextOp() {
+        let op: ((@escaping () -> Void) -> Void)? = withLock {
+            if queueOps.isEmpty {
+                queueBusy = false
+                return nil
+            }
+            return queueOps.removeFirst()
+        }
+        op? { [self] in runNextOp() }
+    }
+
+    private func readQueue() -> [OpenReport] {
+        guard let raw = config.storage.getItem(Self.queueKey), let data = raw.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([OpenReport].self, from: data)) ?? []
+    }
+
+    private func writeQueue(_ q: [OpenReport]) {
+        guard let data = try? JSONEncoder().encode(q), let raw = String(data: data, encoding: .utf8) else { return }
+        config.storage.setItem(Self.queueKey, raw)
+    }
+
+    private func enqueue(_ report: OpenReport) {
+        serial { [self] done in
+            writeQueue(pruneOpenQueue(readQueue() + [report], now: config.now()) { $0.at })
+            done()
+        }
+    }
+
+    /// POST /v1/open; completes with the HTTP status, or nil when there was no answer.
+    private func sendReport(_ report: OpenReport, completion: @escaping (Int?) -> Void) {
+        guard let data = try? JSONEncoder().encode(report),
+              var body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return completion(400) // can't happen; never retry a report that can't be built
+        }
+        body["publishableKey"] = config.publishableKey
+        call("POST", "/v1/open", body) { r in
+            completion(try? r.get().status)
+        }
+    }
+
+    /// Report an open now; keep it for retry if it doesn't get through.
+    private func report(_ rep: OpenReport) {
+        sendReport(rep) { [self] status in
+            if shouldRetryReport(status) { enqueue(rep) } else { flush(completion: nil) } // the network works
+        }
+    }
+
+    private func flush(completion: (() -> Void)?) {
+        let start: Bool = withLock {
+            if flushWaiters != nil {
+                if let c = completion { flushWaiters?.append(c) }
+                return false
+            }
+            flushWaiters = completion.map { [$0] } ?? []
+            return true
+        }
+        guard start else { return }
+        serial { [self] done in
+            let queue = pruneOpenQueue(readQueue(), now: config.now()) { $0.at }
+            var keep: [OpenReport] = []
+            func next(_ i: Int) {
+                guard i < queue.count else {
+                    writeQueue(keep)
+                    let waiters: [() -> Void] = withLock {
+                        let w = flushWaiters ?? []
+                        flushWaiters = nil
+                        return w
+                    }
+                    done()
+                    waiters.forEach { $0() }
+                    return
+                }
+                sendReport(queue[i]) { status in
+                    if shouldRetryReport(status) { keep.append(queue[i]) }
+                    // Once one gets no answer at all, keep the rest for later.
+                    if status == nil {
+                        keep.append(contentsOf: queue[(i + 1)...])
+                        return next(queue.count)
+                    }
+                    next(i + 1)
+                }
+            }
+            next(0)
         }
     }
 
@@ -448,14 +603,6 @@ public final class StraitLinks {
         }
     }
 
-    private func newId(_ at: Double) -> String {
-        let n: Int = withLock {
-            seq += 1
-            return seq
-        }
-        return "evt_\(Int64(at))_\(n)"
-    }
-
     private func announce(_ s: LinkStart) {
         let cbs = withLock { startListeners.map { $0.1 } }
         deliver { cbs.forEach { $0(s) } }
@@ -477,6 +624,41 @@ public final class StraitLinks {
     private func withLock<T>(_ body: () throws -> T) rethrows -> T {
         lock.lock(); defer { lock.unlock() }
         return try body()
+    }
+}
+
+/// One app open as reported to POST /v1/open (contract B14); also the
+/// stored shape in `strait.pendingOpens`.
+struct OpenReport: Codable {
+    var openId: String
+    var kind: String
+    var route: String
+    var appState: String
+    var platform: String
+    var url: String?
+    var clickId: String?
+    var linkId: String?
+    var matched: Bool
+    var reason: String?
+    var firstLaunch: Bool
+    var at: Double
+
+    init(
+        openId: String, kind: LinkKind, route: LinkRoute, appState: AppStateAtLink, platform: String,
+        url: String?, clickId: String?, linkId: String?, matched: Bool, reason: String?, firstLaunch: Bool, at: Double
+    ) {
+        self.openId = openId
+        self.kind = kind.rawValue
+        self.route = route.rawValue
+        self.appState = appState.rawValue
+        self.platform = platform
+        self.url = url
+        self.clickId = clickId
+        self.linkId = linkId
+        self.matched = matched
+        self.reason = reason
+        self.firstLaunch = firstLaunch
+        self.at = at
     }
 }
 

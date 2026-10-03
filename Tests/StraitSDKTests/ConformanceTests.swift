@@ -21,6 +21,8 @@ final class ConformanceTests: XCTestCase {
         let c = try XCTUnwrap(vectors["constants"] as? [String: Any])
         XCTAssertEqual(c["RESUME_WINDOW_MS"] as? Double, RESUME_WINDOW_MS)
         XCTAssertEqual(c["TRANSIENT_PAUSE_MS"] as? Double, TRANSIENT_PAUSE_MS)
+        XCTAssertEqual(c["OPEN_QUEUE_MAX"] as? Int, OPEN_QUEUE_MAX)
+        XCTAssertEqual(c["OPEN_QUEUE_MAX_AGE_MS"] as? Double, OPEN_QUEUE_MAX_AGE_MS)
     }
 
     func testBrowserScreenWidth() throws {
@@ -44,6 +46,51 @@ final class ConformanceTests: XCTestCase {
         }
     }
 
+    func testParseStraitClick() throws {
+        for v in try cases("referrerClick") {
+            let input = v["input"] as? String // null → nil
+            XCTAssertEqual(parseStraitClick(input), v["expected"] as? String, String(describing: input))
+        }
+    }
+
+    func testTakeClickId() throws {
+        for v in try cases("takeClickId") {
+            let input = try XCTUnwrap(v["input"] as? String)
+            let e = try XCTUnwrap(v["expected"] as? [String: Any], input)
+            XCTAssertNotNil(e["clickId"], "clickId present (possibly null): \(input)")
+            let expected = ClickIdSplit(url: try XCTUnwrap(e["url"] as? String), clickId: e["clickId"] as? String)
+            XCTAssertEqual(takeClickId(input), expected, input)
+        }
+    }
+
+    func testPruneOpenQueue() throws {
+        struct Entry { let openId: String; let at: Double }
+        for v in try cases("openQueue") {
+            let name = v["name"] as? String ?? "?"
+            let now = try XCTUnwrap(v["now"] as? Double, name)
+            let queue = try XCTUnwrap(v["queue"] as? [[String: Any]], name).map {
+                Entry(openId: try XCTUnwrap($0["openId"] as? String, name), at: try XCTUnwrap($0["at"] as? Double, name))
+            }
+            XCTAssertEqual(pruneOpenQueue(queue, now: now) { $0.at }.map(\.openId), v["expected"] as? [String], name)
+        }
+    }
+
+    func testShouldRetryReport() throws {
+        for v in try cases("retry") {
+            let status = v["status"] as? Int // null → nil (no answer)
+            XCTAssertEqual(shouldRetryReport(status), try XCTUnwrap(v["expected"] as? Bool), String(describing: status))
+        }
+    }
+
+    func testNewOpenId() {
+        let id = newOpenId(1_800_000_000_000)
+        XCTAssertNotNil(id.range(of: "^o_[a-z0-9]+_[a-z0-9]{12}$", options: .regularExpression), id)
+        XCTAssertTrue(id.hasPrefix("o_\(String(1_800_000_000_000, radix: 36))_"), id)
+        XCTAssertEqual(newOpenId(36, random: { 0 }), "o_10_aaaaaaaaaaaa")
+        XCTAssertEqual(newOpenId(0, random: { 0.9999999 }), "o_0_999999999999")
+        XCTAssertNotEqual(newOpenId(1), newOpenId(1))
+    }
+
     func testClassifyUrl() throws {
         for v in try cases("classify") {
             let raw = try XCTUnwrap(v["raw"] as? String)
@@ -55,11 +102,13 @@ final class ConformanceTests: XCTestCase {
                     XCTAssertEqual(route, .appLink)
                     expected = .shortLink
                 } else {
+                    XCTAssertNotNil(e["clickId"], "clickId present (possibly null): \(raw)")
                     expected = .destination(
                         route: route,
                         url: try XCTUnwrap(e["url"] as? String),
                         path: try XCTUnwrap(e["path"] as? String),
-                        params: try XCTUnwrap(e["params"] as? [String: String])
+                        params: try XCTUnwrap(e["params"] as? [String: String]),
+                        clickId: e["clickId"] as? String // null → nil
                     )
                 }
             }
