@@ -8,7 +8,7 @@ let package = Package(
         .library(name: "StraitSDK", targets: ["StraitSDK"]),
     ],
     targets: [
-        .target(name: "StraitSDK"),
+        .target(name: "StraitSDK", resources: [.copy("PrivacyInfo.xcprivacy")]),
         .testTarget(
             name: "StraitSDKTests",
             dependencies: ["StraitSDK"],
