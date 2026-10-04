@@ -3,8 +3,8 @@
 Deferred deep linking for native iOS — the user taps your link, installs, and
 lands on the right screen. No clipboard paste banner.
 
-Part of [Strait](../). The match signature is a Swift port kept in lockstep with
-the server and every other SDK via [`shared-spec`](../shared-spec) golden vectors
+Part of [Strait](https://straitlink.in). The match signature is a Swift port kept in lockstep with
+the server and every other SDK via shared golden vectors
 (run by `swift test` in CI). 32-bit hash overflow is matched with `Int32` + `&*`.
 
 > ⚠️ Verified by CI (`swift test` on macOS) against the golden vectors. Wire-up
@@ -29,8 +29,8 @@ Create one client at launch and keep it for the app's lifetime.
 import StraitSDK
 
 let strait = StraitLinks(StraitLinksConfig(
-    publishableKey: "bk_pub_live_…",
-    endpoint: "https://go.yourbrand.com",
+    publishableKey: "st_pub_live_…",
+    endpoint: "https://<your-handle>.strait.link",
     linkHosts: ["links.yourbrand.com"]   // extra short-link domains: URLs or bare hosts
 ))
 
@@ -93,7 +93,7 @@ Every time a link opens the app, the SDK reports it once (contract B14):
 | Universal Link tapped in WhatsApp, Gmail, Messages… | `/v1/resolve` (the lookup is the report) | the link; also counted as a tap |
 | Browser handed off to the app (`yourapp://…`) | `/v1/open` | the exact tap (`strait_click`, removed before your app sees the URL) |
 | First open after an App Store install | `/v1/match` | the matched tap |
-| Your own https links | `/v1/open` | host + path only (never the query) |
+| Your own https links | `/v1/open` | the URL (tap id removed); the server keeps host + path only, never the query |
 
 Reports that can't be sent (offline, server busy) are saved in `storage`
 (`strait.pendingOpens`) and retried on the next `start`, whenever the app
@@ -174,15 +174,15 @@ helpers) run under `swift test` in CI.
 
 ```swift
 let result = await Strait.resolveDeferredLink(
-    StraitConfig(publishableKey: "bk_pub_live_…", endpoint: "https://go.yourbrand.com")
+    StraitConfig(publishableKey: "st_pub_live_…", endpoint: "https://<your-handle>.strait.link")
 )
 if result.matched, let url = result.longUrl {
     // route to url
 }
 ```
 
-**Publishable key:** Dashboard → Get started → Publishable key (`bk_pub_live_…`).
-It's safe to include in your app. Never put your secret key (`bk_live_…`) in an app.
+**Publishable key:** Dashboard → Get started → Publishable key (`st_pub_live_…`).
+It's safe to include in your app. Never put your secret key (`st_live_…`) in an app.
 
 Collects only coarse device fields (screen width, scale, language, timezone);
 the **server** adds the observed IP and computes the match signature.

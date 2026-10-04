@@ -9,7 +9,9 @@
     * Other data: screen size, preferred language and time zone, sent once on first
       launch for the same short-lived match.
     * Product interaction: link opens reported to the app owner's Strait workspace.
-  - Required-reason API: UserDefaults stores the SDK's own flags (CA92.1).
+  - Required-reason API: UserDefaults stores the SDK's own state (CA92.1): the
+    once-per-install flag, the last tap id, and open reports waiting to be
+    re-sent (at most 7 days / 100).
 -->
 <plist version="1.0">
 <dict>

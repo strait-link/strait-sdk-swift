@@ -11,9 +11,9 @@ public struct MatchResult: Decodable, Equatable {
 }
 
 public struct StraitConfig {
-    /// Workspace publishable key (`bk_pub_live_…` / `bk_pub_test_…`) from
+    /// Workspace publishable key (`st_pub_live_…` / `st_pub_test_…`) from
     /// Dashboard → Get started. Safe to ship in apps; never use your secret
-    /// key (`bk_live_…`) here.
+    /// key (`st_live_…`) here.
     public let publishableKey: String
     public let endpoint: String
     public init(publishableKey: String, endpoint: String) {

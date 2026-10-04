@@ -115,7 +115,7 @@ public final class StraitSubscription {
 }
 
 public struct StraitLinksConfig {
-    /// Workspace publishable key (`bk_pub_live_…`), Dashboard → Get started.
+    /// Workspace publishable key (`st_pub_live_…`), Dashboard → Get started.
     public var publishableKey: String
     /// Your Strait link host, e.g. https://go.yourbrand.com
     public var endpoint: String
