@@ -54,6 +54,13 @@ final class ConformanceTests: XCTestCase {
         }
     }
 
+    func testPortraitScreenWidth() throws {
+        for v in try cases("portraitScreenWidth") {
+            let w = try XCTUnwrap(v["width"] as? Double), h = try XCTUnwrap(v["height"] as? Double)
+            XCTAssertEqual(portraitScreenWidth(w, h), v["expected"] as? Int, "\(w)x\(h)")
+        }
+    }
+
     func testSplitUrl() throws {
         for v in try cases("splitUrl") {
             let input = try XCTUnwrap(v["input"] as? String)

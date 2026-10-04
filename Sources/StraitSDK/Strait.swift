@@ -73,12 +73,13 @@ public struct DeviceFields: Equatable {
     }
 }
 
-/// This device's fields. `screenWidth` is `browserScreenWidth` of the logical
-/// width, so it equals what Safari reports at the tap (B2).
+/// This device's fields. `screenWidth` is `portraitScreenWidth` of the logical
+/// bounds (the shorter side, whatever the orientation), so it equals what Safari
+/// reports at the tap (B2, B17).
 public func collectDevice() -> DeviceFields {
     #if canImport(UIKit) && !os(watchOS)
     let screen = UIScreen.main
-    let width = browserScreenWidth(Double(screen.bounds.width))
+    let width = portraitScreenWidth(Double(screen.bounds.width), Double(screen.bounds.height))
     let scale = Double(screen.scale)
     #else
     let width = 0

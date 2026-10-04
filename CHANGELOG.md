@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1
+
+- Report the portrait screen width so a first launch in landscape still matches the tap
+  (shared-spec/SDK-CONTRACT.md B17): `collectDevice()` now sends the shorter side of
+  `UIScreen.main.bounds` (it sent the orientation-dependent width).
+- New core function: `portraitScreenWidth(_:_:)` (conformance vectors v5).
+
 ## 0.7.0
 
 - Every attributed open now supplies the tap id (shared-spec/SDK-CONTRACT.md B16):

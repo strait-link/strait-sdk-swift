@@ -29,6 +29,13 @@ public func browserScreenWidth(_ logicalWidth: Double) -> Int {
     Int((logicalWidth - 0.001).rounded(.up))
 }
 
+/// The `screenWidth` device field (B17): the screen's SHORTER side, as a browser
+/// reports it. Safari's `screen.width` at the tap is the portrait width whatever
+/// the orientation, so an app first launched in landscape (844×390) still reports 390.
+public func portraitScreenWidth(_ logicalWidth: Double, _ logicalHeight: Double) -> Int {
+    browserScreenWidth(min(logicalWidth, logicalHeight))
+}
+
 public struct SplitUrl: Equatable, Decodable {
     public let scheme: String
     public let host: String
