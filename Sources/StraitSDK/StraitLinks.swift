@@ -451,7 +451,7 @@ public final class StraitLinks {
                 let matched = (json["matched"] as? Bool) == true
                 let reason = matched ? nil : (json["reason"] as? String) ?? (json["error"] as? String)
                 let linkId = json["linkId"] as? String
-                if matched { noteTap(nil, at: t0) }
+                if matched { noteTap(replyClickId(json["clickId"]), at: t0) }
                 if (json["recorded"] as? Bool) != true {
                     var rep = base
                     rep.matched = matched
@@ -486,7 +486,7 @@ public final class StraitLinks {
                 reason = matched ? nil : "no_match"
                 dest = matched ? destination(res.json["longUrl"] as? String) : .none
                 linkId = res.json["linkId"] as? String
-                if record && matched { noteTap(nil, at: t0) }
+                if record && matched { noteTap(replyClickId(res.json["clickId"]), at: t0) }
             }
             completion(emit(LinkEvent(
                 id: id, kind: .deferred, route: .fingerprint, appState: .closed, matched: matched, reason: reason,

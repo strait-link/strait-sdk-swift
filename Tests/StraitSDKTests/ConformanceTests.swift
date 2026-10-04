@@ -37,6 +37,16 @@ final class ConformanceTests: XCTestCase {
         }
     }
 
+    func testReplyClickId() throws {
+        for v in try cases("replyClickId") {
+            let name = try XCTUnwrap(v["name"] as? String)
+            XCTAssertEqual(
+                replyClickId(v["reply"] is NSNull ? nil : v["reply"], fallback: v["fallback"] as? String),
+                v["expected"] as? String, name
+            )
+        }
+    }
+
     func testBrowserScreenWidth() throws {
         for v in try cases("screenWidth") {
             let logical = try XCTUnwrap(v["logical"] as? Double)

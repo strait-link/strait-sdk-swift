@@ -753,7 +753,7 @@ final class EventClickIdTests: XCTestCase {
         XCTAssertNil(lastEvent(engine)?["clickId"])
     }
 
-    func testNewerShortLinkOpenForgetsOlderTap() {
+    func testNewerShortLinkOpenWithoutReplyTapIdForgetsOlderTap() {
         var routes = resolved
         routes["/v1/event"] = ["ok": true]
         routes["/v1/open"] = ["ok": true]
@@ -765,7 +765,43 @@ final class EventClickIdTests: XCTestCase {
         XCTAssertNil(lastEvent(engine)?["clickId"])
     }
 
-    func testFingerprintMatchForgetsOlderTap() {
+    func testB16ShortLinkOpenRemembersReplyTapId() {
+        var reply = resolved["/v1/resolve"]!
+        reply["recorded"] = true
+        reply["clickId"] = TAP.uppercased()
+        let engine = FakeEngine(["/v1/resolve": reply, "/v1/event": ["ok": true], "/v1/open": ["ok": true]])
+        let h = Harness(engine)
+        h.start("straitlink://shop.example/p/42?strait_click=\(OTHER_TAP)")
+        h.strait.handle(urlString: "https://links.test/sale")
+        h.strait.trackEvent("purchase")
+        XCTAssertEqual(lastEvent(engine)?["clickId"] as? String, TAP)
+    }
+
+    func testB16FingerprintMatchRemembersReplyTapId() {
+        let storage = MemoryStorage()
+        storage.setItem(StraitLinks.tapKey, rememberTap(OTHER_TAP, at: 1_000_000))
+        let engine = FakeEngine([
+            "/v1/event": ["ok": true],
+            "/v1/match": ["matched": true, "longUrl": "https://shop.example/p/7", "linkId": "lnk_7", "clickId": TAP],
+        ])
+        let h = Harness(engine, storage: storage)
+        h.start()
+        h.strait.trackEvent("purchase")
+        XCTAssertEqual(lastEvent(engine)?["clickId"] as? String, TAP)
+    }
+
+    func testB16MalformedReplyTapIdForgets() {
+        var reply = resolved["/v1/resolve"]!
+        reply["clickId"] = "nope"
+        let engine = FakeEngine(["/v1/resolve": reply, "/v1/event": ["ok": true], "/v1/open": ["ok": true]])
+        let h = Harness(engine)
+        h.start("straitlink://shop.example/p/42?strait_click=\(TAP)")
+        h.strait.handle(urlString: "https://links.test/sale")
+        h.strait.trackEvent("purchase")
+        XCTAssertNil(lastEvent(engine)?["clickId"])
+    }
+
+    func testFingerprintMatchWithoutReplyTapIdForgetsOlderTap() {
         let storage = MemoryStorage()
         storage.setItem(StraitLinks.tapKey, rememberTap(TAP, at: 1_000_000))
         let engine = FakeEngine([

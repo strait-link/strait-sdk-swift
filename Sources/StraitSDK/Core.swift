@@ -225,6 +225,17 @@ public func eventClickId(_ stored: String?, now: Double, explicit: String? = nil
     return age >= 0 && age <= ATTRIBUTION_WINDOW_MS ? clickId.lowercased() : nil
 }
 
+/// The tap id to remember after an attributed open the engine answered
+/// (contract B16): the reply's `clickId` when it is a valid tap id
+/// (lower-cased); else `fallback` when valid (a tap id the SDK already knew,
+/// e.g. the Play referrer's — so an older engine that returns none keeps B15);
+/// else nil, which forgets the remembered tap (the newer touch wins).
+public func replyClickId(_ reply: Any?, fallback: String? = nil) -> String? {
+    if let r = reply as? String, isClickId(r) { return r.lowercased() }
+    if let f = fallback, isClickId(f) { return f.lowercased() }
+    return nil
+}
+
 /// Whether a failed report should be kept for retry: no answer (nil), 429 or 5xx.
 public func shouldRetryReport(_ status: Int?) -> Bool {
     guard let status = status else { return true }
