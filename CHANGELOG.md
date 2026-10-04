@@ -47,7 +47,7 @@
   `parseStraitLink` / `parseStraitClick` → `parseStraitLink` / `parseStraitClick`.
 - Wire params: `strait_link` and `strait_click` only.
 - Storage keys: `strait.deferredChecked`, `strait.pendingOpens` (old values are ignored).
-- brand.json is final (Strait, https://usestrait.com, strait.link, Strait Technologies).
+- brand.json is final (Strait, https://usestrait.com, strait.link; the copyright holder is now "The Strait authors").
 - Shared vectors (`conformance-vectors.json`) follow the rename.
 
 ## 0.4.0
