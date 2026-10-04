@@ -232,6 +232,39 @@ public func eventClickId(_ stored: String?, now: Double, explicit: String? = nil
     return age >= 0 && age <= ATTRIBUTION_WINDOW_MS ? clickId.lowercased() : nil
 }
 
+/// True when the remembered tap (`stored`, see `rememberTap`) is set but can no
+/// longer be used: unreadable, malformed, or opened more than
+/// `ATTRIBUTION_WINDOW_MS` before `now` (or after it). The SDK then deletes it
+/// instead of keeping it on the device (contract B18).
+public func staleTap(_ stored: String?, now: Double) -> Bool {
+    guard let stored = stored, !stored.isEmpty else { return false }
+    return eventClickId(stored, now: now) == nil
+}
+
+/// The URL an SDK reports to the engine (`/v1/open`, `/v1/resolve`) or saves in
+/// the open queue (contract B18): the query string and fragment are removed,
+/// except the first `utm_source` pair, kept byte for byte, because the engine
+/// reads it for channel attribution. The engine keeps nothing else from the
+/// query: it stores host + path only. The query is what sits before any '#',
+/// between the first and second '?'. Works on UTF-8 bytes (the delimiters are
+/// ASCII), so the result matches every other SDK exactly.
+public func reportUrl(_ url: String) -> String {
+    var bytes = Array(url.utf8)
+    if let hash = bytes.firstIndex(of: UInt8(ascii: "#")) { bytes = Array(bytes[..<hash]) }
+    guard let q = bytes.firstIndex(of: UInt8(ascii: "?")) else { return String(decoding: bytes, as: UTF8.self) }
+    let base = Array(bytes[..<q])
+    let rest = bytes[(q + 1)...]
+    let query = rest.split(separator: UInt8(ascii: "?"), maxSplits: 1, omittingEmptySubsequences: false).first ?? []
+    let key = Array("utm_source".utf8)
+    for pair in query.split(separator: UInt8(ascii: "&"), omittingEmptySubsequences: false) {
+        let name = pair.firstIndex(of: UInt8(ascii: "=")).map { pair[pair.startIndex..<$0] } ?? pair
+        if Array(name) == key {
+            return String(decoding: base + [UInt8(ascii: "?")] + Array(pair), as: UTF8.self)
+        }
+    }
+    return String(decoding: base, as: UTF8.self)
+}
+
 /// The tap id to remember after an attributed open the engine answered
 /// (contract B16): the reply's `clickId` when it is a valid tap id
 /// (lower-cased); else `fallback` when valid (a tap id the SDK already knew,

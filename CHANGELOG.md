@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.2
+
+- Privacy hardening (shared-spec/SDK-CONTRACT.md B18): the URL sent to `/v1/open` and
+  `/v1/resolve`, and every report saved in the offline queue (`strait.pendingOpens`),
+  is now host + path only; the query string and fragment are dropped, except the first
+  `utm_source` pair, which the engine uses for channel attribution. Reports saved by an
+  older version are stripped the next time the queue is read. Your app's `LinkEvent`
+  (`rawUrl`, `url`, `params`) is unchanged.
+- An expired remembered tap id (`strait.lastTap`, older than 7 days or unreadable) is now
+  deleted at `start` and on `trackEvent`, instead of only being ignored.
+- New core functions: `reportUrl(_:)`, `staleTap(_:now:)` (conformance vectors v6).
+
 ## 0.7.1
 
 - Report the portrait screen width so a first launch in landscape still matches the tap

@@ -47,6 +47,21 @@ final class ConformanceTests: XCTestCase {
         }
     }
 
+    func testReportUrl() throws {
+        for v in try cases("reportUrl") {
+            let input = try XCTUnwrap(v["input"] as? String)
+            XCTAssertEqual(reportUrl(input), v["expected"] as? String, input)
+        }
+    }
+
+    func testStaleTap() throws {
+        for v in try cases("staleTap") {
+            let name = try XCTUnwrap(v["name"] as? String)
+            let now = try XCTUnwrap(v["now"] as? Double, name)
+            XCTAssertEqual(staleTap(v["stored"] as? String, now: now), try XCTUnwrap(v["expected"] as? Bool, name), name)
+        }
+    }
+
     func testBrowserScreenWidth() throws {
         for v in try cases("screenWidth") {
             let logical = try XCTUnwrap(v["logical"] as? Double)

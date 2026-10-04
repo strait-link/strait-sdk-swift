@@ -184,6 +184,8 @@ public final class StraitLinks {
     private let linkHosts: [String]
     private let tracker = AppStateTracker()
     private let lock = NSLock()
+    /// Serialises every read-modify-write of `strait.lastTap` (B18).
+    private let tapLock = NSLock()
     private var events: [LinkEvent] = []
     private var listeners: [(Int, (LinkEvent) -> Void)] = []
     private var startListeners: [(Int, (LinkStart) -> Void)] = []
@@ -213,6 +215,7 @@ public final class StraitLinks {
     /// when the launch itself was a link — and sends any saved open reports.
     public func start(initialURL: URL? = nil, completion: (() -> Void)? = nil) {
         if config.observeLifecycle { observeAppLifecycle() }
+        dropStaleTap(now: config.now())
         let firstLaunch = config.storage.getItem(Self.deferredFlag) != "1"
         let finish = { [self] in
             flush(completion: nil)
@@ -371,7 +374,9 @@ public final class StraitLinks {
         if let value = value { body["value"] = value }
         if let currency = currency { body["currency"] = currency }
         if let linkId = linkId { body["linkId"] = linkId }
-        if let tap = eventClickId(config.storage.getItem(Self.tapKey), now: config.now(), explicit: clickId) {
+        let stored: String? = locked(tapLock) { config.storage.getItem(Self.tapKey) }
+        if staleTap(stored, now: config.now()) { dropStaleTap(now: config.now()) }
+        if let tap = eventClickId(stored, now: config.now(), explicit: clickId) {
             body["clickId"] = tap
         }
         call("POST", "/v1/event", body) { [self] r in
@@ -401,7 +406,15 @@ public final class StraitLinks {
     /// Remember the tap of an attributed open (B15), or forget the older one
     /// when this newer attributed open has no tap id the SDK knows.
     private func noteTap(_ clickId: String?, at: Double) {
-        config.storage.setItem(Self.tapKey, clickId.map { rememberTap($0, at: at) } ?? "")
+        locked(tapLock) { config.storage.setItem(Self.tapKey, clickId.map { rememberTap($0, at: at) } ?? "") }
+    }
+
+    /// B18: delete an expired remembered tap instead of only ignoring it. Re-read
+    /// under the tap lock so a newer tap written meanwhile is never lost.
+    private func dropStaleTap(now: Double) {
+        locked(tapLock) {
+            if staleTap(config.storage.getItem(Self.tapKey), now: now) { config.storage.setItem(Self.tapKey, "") }
+        }
     }
 
     private func handleUrl(_ raw: String, appState: AppStateAtLink, firstLaunch: Bool, completion: ((LinkEvent) -> Void)?) {
@@ -425,19 +438,21 @@ public final class StraitLinks {
             if let clickId = clickId { noteTap(clickId, at: t0) }
             // Navigation never waits for the report.
             report(OpenReport(
-                openId: id, kind: .direct, route: route, appState: appState, platform: platform, url: url,
+                openId: id, kind: .direct, route: route, appState: appState, platform: platform, url: reportUrl(url),
                 clickId: clickId, linkId: nil, matched: true, reason: nil, firstLaunch: firstLaunch, at: t0
             ))
             done(route, true, nil, Destination(url: url, path: path, params: params), nil)
         case .shortLink:
             // The lookup is also the open report (openId); the engine says whether
             // it recorded it, and anything short of that is retried via /v1/open.
+            // B18: only host + path (+ utm_source) leave the device or reach storage.
+            let reported = reportUrl(raw)
             let base = OpenReport(
-                openId: id, kind: .direct, route: .appLink, appState: appState, platform: platform, url: raw,
+                openId: id, kind: .direct, route: .appLink, appState: appState, platform: platform, url: reported,
                 clickId: nil, linkId: nil, matched: false, reason: nil, firstLaunch: firstLaunch, at: t0
             )
             let body: [String: Any] = [
-                "publishableKey": config.publishableKey, "url": raw, "platform": platform,
+                "publishableKey": config.publishableKey, "url": reported, "platform": platform,
                 "openId": id, "appState": appState.rawValue, "firstLaunch": firstLaunch, "at": Int64(t0),
             ]
             call("POST", "/v1/resolve", body) { [self] r in
@@ -521,7 +536,13 @@ public final class StraitLinks {
 
     private func readQueue() -> [OpenReport] {
         guard let raw = config.storage.getItem(Self.queueKey), let data = raw.data(using: .utf8) else { return [] }
-        return (try? JSONDecoder().decode([OpenReport].self, from: data)) ?? []
+        // B18: reports saved by an older SDK may hold a full URL; strip it here
+        // so the next write leaves no query or fragment on the device.
+        return ((try? JSONDecoder().decode([OpenReport].self, from: data)) ?? []).map { rep in
+            var r = rep
+            r.url = rep.url.map(reportUrl)
+            return r
+        }
     }
 
     private func writeQueue(_ q: [OpenReport]) {
@@ -643,6 +664,12 @@ public final class StraitLinks {
         lock.lock(); defer { lock.unlock() }
         return try body()
     }
+}
+
+/// Runs `body` holding `lock` (NSLocking.withLock needs iOS 16 / macOS 13).
+private func locked<T>(_ lock: NSLock, _ body: () throws -> T) rethrows -> T {
+    lock.lock(); defer { lock.unlock() }
+    return try body()
 }
 
 /// One app open as reported to POST /v1/open (contract B14); also the

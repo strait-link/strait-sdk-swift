@@ -16,7 +16,7 @@ the server and every other SDK via shared golden vectors
 Xcode: **File → Add Package Dependencies…** and paste the repo URL, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.7.1")
+.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.7.2")
 // target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
 <!-- /brand:install -->
@@ -93,7 +93,7 @@ Every time a link opens the app, the SDK reports it once (contract B14):
 | Universal Link tapped in WhatsApp, Gmail, Messages… | `/v1/resolve` (the lookup is the report) | the link; also counted as a tap |
 | Browser handed off to the app (`yourapp://…`) | `/v1/open` | the exact tap (`strait_click`, removed before your app sees the URL) |
 | First open after an App Store install | `/v1/match` | the matched tap |
-| Your own https links | `/v1/open` | the URL (tap id removed); the server keeps host + path only, never the query |
+| Your own https links | `/v1/open` | the URL's host + path (plus `utm_source`, for the channel); query and fragment never leave the device (B18) |
 
 Reports that can't be sent (offline, server busy) are saved in `storage`
 (`strait.pendingOpens`) and retried on the next `start`, whenever the app
@@ -166,6 +166,7 @@ A `LinkStart` with the same `id` fires first, before any network call.
 | B15 conversion events carry the tap id of the last attributed open (7 days; `clickId:` overrides) | ✓ (`strait.lastTap`) |
 | B16 every attributed open supplies the tap id (`/v1/resolve` and `/v1/match` reply `clickId`, `replyClickId`) | ✓ |
 | B17 `screenWidth` is the portrait width: `portraitScreenWidth(bounds.width, bounds.height)` in any orientation | ✓ |
+| B18 reported/queued URLs stripped to host + path (+ `utm_source`) via `reportUrl`; expired remembered taps deleted (`staleTap`) | ✓ |
 
 Both `test-vectors.json` (signature) and `conformance-vectors.json` (pure
 helpers) run under `swift test` in CI.

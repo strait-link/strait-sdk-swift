@@ -470,7 +470,7 @@ final class HandOffOpenTests: XCTestCase {
         XCTAssertEqual(body["route"] as? String, "custom_scheme")
         XCTAssertEqual(body["appState"] as? String, "background")
         XCTAssertEqual(body["platform"] as? String, "ios")
-        XCTAssertEqual(body["url"] as? String, "https://shop.example/p/42?color=red")
+        XCTAssertEqual(body["url"] as? String, "https://shop.example/p/42") // B18: no query
         XCTAssertEqual(body["clickId"] as? String, CLICK)
         XCTAssertEqual(body["matched"] as? Bool, true)
         XCTAssertEqual(body["firstLaunch"] as? Bool, false)
@@ -812,5 +812,87 @@ final class EventClickIdTests: XCTestCase {
         h.start()
         h.strait.trackEvent("purchase")
         XCTAssertNil(lastEvent(engine)?["clickId"])
+    }
+}
+
+/// Contract B18: no query or fragment leaves the device or reaches storage;
+/// expired remembered taps are deleted, not only ignored.
+final class PrivacyTests: XCTestCase {
+    private let DAY: Double = 24 * 3600 * 1000
+
+    private func returning() -> MemoryStorage {
+        let s = MemoryStorage()
+        s.setItem(StraitLinks.deferredFlag, "1")
+        return s
+    }
+
+    func testOpenReportKeepsOnlyHostPathAndUtmSource() throws {
+        let engine = FakeEngine(["/v1/open": ["ok": true]])
+        let h = Harness(engine, storage: returning())
+        h.start()
+        h.strait.handle(urlString: "https://shop.example/p/42?email=jo%40x.com&utm_source=sms#reset-token")
+        let e = try XCTUnwrap(h.events.last)
+        XCTAssertEqual(e.url, "https://shop.example/p/42?email=jo%40x.com&utm_source=sms#reset-token")
+        XCTAssertEqual(e.params, ["email": "jo@x.com", "utm_source": "sms"])
+        XCTAssertEqual(engine.calls(to: "/v1/open").first?.body?["url"] as? String, "https://shop.example/p/42?utm_source=sms")
+    }
+
+    func testFailedShortLinkIsResolvedAndQueuedWithoutQuery() throws {
+        let engine = FakeEngine()
+        engine.offline = true
+        let h = Harness(engine, storage: returning())
+        h.start()
+        h.strait.handle(urlString: "https://links.test/sale?session=s3cr3t&utm_source=wa#frag")
+        XCTAssertEqual(engine.calls(to: "/v1/resolve").first?.body?["url"] as? String, "https://links.test/sale?utm_source=wa")
+        let saved = try XCTUnwrap(h.storage.getItem(StraitLinks.queueKey))
+        XCTAssertFalse(saved.contains("s3cr3t"))
+        let list = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(saved.utf8)) as? [[String: Any]])
+        XCTAssertEqual(list.first?["url"] as? String, "https://links.test/sale?utm_source=wa")
+    }
+
+    func testOlderQueuedReportsAreStrippedBeforeSendingOrSaving() throws {
+        let storage = returning()
+        storage.setItem(StraitLinks.queueKey, """
+        [{"openId":"o_old_aaaaaaaaaaaa","kind":"direct","route":"app_link","appState":"closed","platform":"ios","url":"https://shop.example/p?token=abc#x","matched":true,"firstLaunch":false,"at":999000}]
+        """)
+        let engine = FakeEngine()
+        engine.offline = true
+        let h = Harness(engine, storage: storage)
+        h.start()
+        h.strait.flushOpenReports()
+        XCTAssertEqual(engine.calls(to: "/v1/open").first?.body?["url"] as? String, "https://shop.example/p")
+        XCTAssertFalse(try XCTUnwrap(storage.getItem(StraitLinks.queueKey)).contains("token"))
+    }
+
+    func testExpiredTapIsDeletedAtStart() {
+        let storage = returning()
+        storage.setItem(StraitLinks.tapKey, rememberTap(TAP, at: 1_000_000 - 8 * DAY))
+        let h = Harness(FakeEngine(), storage: storage)
+        h.start()
+        XCTAssertEqual(storage.getItem(StraitLinks.tapKey), "")
+    }
+
+    func testTapThatExpiresWhileRunningIsDeletedByTrackEventAndNotSent() {
+        let storage = returning()
+        storage.setItem(StraitLinks.tapKey, rememberTap(TAP, at: 1_000_000))
+        let engine = FakeEngine(["/v1/event": ["ok": true]])
+        let h = Harness(engine, storage: storage)
+        h.start()
+        XCTAssertTrue(storage.getItem(StraitLinks.tapKey)?.contains(TAP) == true)
+        h.clock.advance(7 * DAY + 1)
+        h.strait.trackEvent("purchase")
+        XCTAssertNil(engine.calls(to: "/v1/event").first?.body?["clickId"])
+        XCTAssertEqual(storage.getItem(StraitLinks.tapKey), "")
+    }
+
+    func testValidTapIsKeptAndSent() {
+        let storage = returning()
+        storage.setItem(StraitLinks.tapKey, rememberTap(TAP, at: 1_000_000 - 1000))
+        let engine = FakeEngine(["/v1/event": ["ok": true]])
+        let h = Harness(engine, storage: storage)
+        h.start()
+        h.strait.trackEvent("purchase")
+        XCTAssertEqual(engine.calls(to: "/v1/event").first?.body?["clickId"] as? String, TAP)
+        XCTAssertTrue(storage.getItem(StraitLinks.tapKey)?.contains(TAP) == true)
     }
 }
