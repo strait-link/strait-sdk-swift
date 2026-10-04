@@ -933,7 +933,6 @@ private let claimed: [String: Any] = [
     "matched": true, "longUrl": "https://shop.example/promo/42?x=1", "linkId": "lnk_42",
     "clickId": CLAIM_TAP, "matchMethod": "clipboard",
 ]
-private let noMatch: [String: Any] = ["matched": false, "matchMethod": "none"]
 
 final class ClipboardBoostTests: XCTestCase {
     func testDefaultConfigNeverTouchesTheClipboard() throws {
