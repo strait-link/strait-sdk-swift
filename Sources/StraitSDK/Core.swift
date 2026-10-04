@@ -10,6 +10,8 @@ public enum LinkRoute: String, Equatable, Decodable {
     case customScheme = "custom_scheme"
     case installReferrer = "install_referrer"
     case fingerprint
+    /// A deferred link claimed from the clipboard boost's handoff link (B19).
+    case clipboard
 }
 
 /// What the app was doing when the link arrived.
@@ -289,6 +291,32 @@ public func newOpenId(_ now: Double, random: () -> Double = { Double.random(in: 
     var r = ""
     for _ in 0..<12 { r.append(alphabet[min(35, Int(random() * 36))]) }
     return "o_\(String(Int64(now), radix: 36))_\(r)"
+}
+
+/// A clipboard-boost handoff token as the tap page mints it: 128 random bits, base64url (B19).
+private let handoffToken = try! NSRegularExpression(pattern: "^[A-Za-z0-9_-]{22}$")
+private let handoffLink = try! NSRegularExpression(
+    pattern: "^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#\\s]+)/h/([^/?#\\s]*)/?(?:[?#]\\S*)?$"
+)
+
+/// The handoff token inside text read from the clipboard (contract B19), or
+/// nil. Only a Strait handoff link counts: `https://<link host>/h/<token>`,
+/// where the host is one of this app's link hosts (`normalizeLinkHosts`), the
+/// path is exactly `/h/<22 base64url chars>` (one trailing slash allowed), and
+/// the whole text (trimmed) is that one URL. A query or fragment after it is
+/// ignored. Scheme and host compare case-insensitively; path and token don't.
+public func parseHandoffUrl(_ text: String?, linkHosts: [String]) -> String? {
+    guard let text = text else { return nil }
+    let s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !s.isEmpty, s.utf16.count <= 2048 else { return nil }
+    let ns = s as NSString
+    guard let m = handoffLink.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) else { return nil }
+    guard ns.substring(with: m.range(at: 1)).lowercased() == "https" else { return nil }
+    let host = ns.substring(with: m.range(at: 2)).lowercased()
+    guard linkHosts.contains(where: { $0.lowercased() == host }) else { return nil }
+    let token = ns.substring(with: m.range(at: 3))
+    let tn = token as NSString
+    return handoffToken.firstMatch(in: token, range: NSRange(location: 0, length: tn.length)) != nil ? token : nil
 }
 
 /// A link arriving this soon after the app came back to the front came "from background".

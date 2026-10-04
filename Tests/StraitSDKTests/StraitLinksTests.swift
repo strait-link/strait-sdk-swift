@@ -63,14 +63,19 @@ final class Harness {
     let strait: StraitLinks
     var events: [LinkEvent] = []
 
-    init(_ engine: FakeEngine, storage: MemoryStorage = MemoryStorage(), linkHosts: [String] = []) {
+    let pasteboard: SpyPasteboard
+
+    init(_ engine: FakeEngine, storage: MemoryStorage = MemoryStorage(), linkHosts: [String] = [],
+         clipboardBoost: Bool = false, pasteboard: SpyPasteboard = SpyPasteboard(), platform: String = "ios") {
         self.engine = engine
+        self.pasteboard = pasteboard
         self.storage = storage
         let clock = FakeClock()
         self.clock = clock
         strait = StraitLinks(StraitLinksConfig(
             publishableKey: PK, endpoint: ENDPOINT, linkHosts: linkHosts, storage: storage, transport: engine,
-            now: { clock.t }, device: { device }, callbackQueue: nil, observeLifecycle: false
+            now: { clock.t }, device: { device }, platform: platform, callbackQueue: nil, observeLifecycle: false,
+            clipboardBoost: clipboardBoost, pasteboard: pasteboard
         ))
         strait.onLink { [unowned self] in self.events.append($0) }
     }
@@ -894,5 +899,181 @@ final class PrivacyTests: XCTestCase {
         h.strait.trackEvent("purchase")
         XCTAssertEqual(engine.calls(to: "/v1/event").first?.body?["clickId"] as? String, TAP)
         XCTAssertTrue(storage.getItem(StraitLinks.tapKey)?.contains(TAP) == true)
+    }
+}
+
+
+// MARK: - Clipboard boost (B19)
+
+/// Records every clipboard access. Answers synchronously.
+final class SpyPasteboard: StraitPasteboard {
+    var probableURL: Bool
+    var text: String?
+    private(set) var detectCalls = 0
+    private(set) var readCalls = 0
+    init(probableURL: Bool = true, text: String? = nil) {
+        self.probableURL = probableURL
+        self.text = text
+    }
+    func hasProbableWebURL(completion: @escaping (Bool) -> Void) {
+        detectCalls += 1
+        completion(probableURL)
+    }
+    func readString() -> String? {
+        readCalls += 1
+        return text
+    }
+    var touched: Int { detectCalls + readCalls }
+}
+
+private let TOKEN = "AbCdEfGhIjKlMnOpQrStUv"
+private let HANDOFF = "https://links.test/h/\(TOKEN)"
+private let CLAIM_TAP = "3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f"
+private let claimed: [String: Any] = [
+    "matched": true, "longUrl": "https://shop.example/promo/42?x=1", "linkId": "lnk_42",
+    "clickId": CLAIM_TAP, "matchMethod": "clipboard",
+]
+private let noMatch: [String: Any] = ["matched": false, "matchMethod": "none"]
+
+final class ClipboardBoostTests: XCTestCase {
+    func testDefaultConfigNeverTouchesTheClipboard() throws {
+        let spy = SpyPasteboard(probableURL: true, text: HANDOFF)
+        let h = Harness(FakeEngine(["/v1/match": noMatch, "/v1/handoff/claim": claimed]), pasteboard: spy)
+        h.start()
+        h.strait.checkDeferred()
+        h.strait.reportFingerprint()
+        h.strait.handle(urlString: "https://shop.example/p/1")
+        XCTAssertEqual(spy.detectCalls, 0)
+        XCTAssertEqual(spy.readCalls, 0)
+        XCTAssertTrue(h.engine.calls(to: "/v1/handoff/claim").isEmpty)
+        XCTAssertEqual(h.engine.calls(to: "/v1/match").count, 2)
+    }
+
+    func testDebugCheckDeferredNeverTouchesTheClipboardEvenWithBoost() throws {
+        let spy = SpyPasteboard(probableURL: true, text: HANDOFF)
+        let storage = MemoryStorage()
+        storage.setItem(StraitLinks.deferredFlag, "1")
+        let h = Harness(FakeEngine(["/v1/match": noMatch, "/v1/handoff/claim": claimed]), storage: storage, clipboardBoost: true, pasteboard: spy)
+        h.start()
+        h.strait.checkDeferred()
+        XCTAssertEqual(spy.touched, 0)
+        XCTAssertTrue(h.engine.calls(to: "/v1/handoff/claim").isEmpty)
+    }
+
+    func testNoProbableURLMeansNoRead() throws {
+        let spy = SpyPasteboard(probableURL: false, text: HANDOFF)
+        let h = Harness(FakeEngine(["/v1/match": noMatch]), clipboardBoost: true, pasteboard: spy)
+        h.start()
+        XCTAssertEqual(spy.detectCalls, 1)
+        XCTAssertEqual(spy.readCalls, 0, "read (the paste prompt) only when a URL is likely")
+        XCTAssertTrue(h.engine.calls(to: "/v1/handoff/claim").isEmpty)
+        XCTAssertEqual(h.engine.calls(to: "/v1/match").count, 1)
+    }
+
+    func testBoostIsIOSOnly() throws {
+        let spy = SpyPasteboard(probableURL: true, text: HANDOFF)
+        let h = Harness(FakeEngine(["/v1/match": noMatch]), clipboardBoost: true, pasteboard: spy, platform: "android")
+        h.start()
+        XCTAssertEqual(spy.touched, 0)
+    }
+
+    func testClaimMatchIsExactAndRemembersTheTap() throws {
+        let spy = SpyPasteboard(probableURL: true, text: "  \(HANDOFF)\n")
+        let storage = MemoryStorage()
+        let h = Harness(FakeEngine(["/v1/match": noMatch, "/v1/handoff/claim": claimed]), storage: storage, clipboardBoost: true, pasteboard: spy)
+        h.start()
+        XCTAssertEqual(spy.readCalls, 1)
+        let claim = try XCTUnwrap(h.engine.calls(to: "/v1/handoff/claim").first?.body)
+        XCTAssertEqual(claim["token"] as? String, TOKEN)
+        XCTAssertEqual(claim["publishableKey"] as? String, PK)
+        XCTAssertEqual(claim["platform"] as? String, "ios")
+        XCTAssertNotNil(claim["openId"] as? String)
+        XCTAssertNotNil(claim["at"])
+        XCTAssertNil(claim["screenWidth"], "the claim carries no device fields")
+        XCTAssertTrue(h.engine.calls(to: "/v1/match").isEmpty)
+        let e = try XCTUnwrap(h.events.last)
+        XCTAssertEqual(e.kind, .deferred)
+        XCTAssertEqual(e.route, .clipboard)
+        XCTAssertTrue(e.matched)
+        XCTAssertEqual(e.url, "https://shop.example/promo/42?x=1")
+        XCTAssertEqual(e.linkId, "lnk_42")
+        XCTAssertEqual(e.id, claim["openId"] as? String)
+        XCTAssertEqual(storage.getItem(StraitLinks.deferredFlag), "1")
+        XCTAssertTrue(storage.getItem(StraitLinks.tapKey)?.contains(CLAIM_TAP) == true)
+    }
+
+    func testUnmatchedClaimFallsBackToSignalMatchWithSameOpenId() throws {
+        let spy = SpyPasteboard(probableURL: true, text: HANDOFF)
+        let engine = FakeEngine([
+            "/v1/handoff/claim": ["matched": false, "matchMethod": "none", "reason": "handoff_used"],
+            "/v1/match": ["matched": true, "longUrl": "https://shop.example/m", "linkId": "lnk_m"],
+        ])
+        let h = Harness(engine, clipboardBoost: true, pasteboard: spy)
+        h.start()
+        let claim = try XCTUnwrap(engine.calls(to: "/v1/handoff/claim").first?.body)
+        let match = try XCTUnwrap(engine.calls(to: "/v1/match").first?.body)
+        XCTAssertEqual(claim["openId"] as? String, match["openId"] as? String)
+        XCTAssertEqual(h.events.last?.route, .fingerprint)
+        XCTAssertEqual(h.events.last?.matched, true)
+    }
+
+    func testNonHandoffTextSendsNoClaim() throws {
+        for text in ["https://evil.example/h/\(TOKEN)", "https://links.test/promo", "hello", "http://links.test/h/\(TOKEN)"] {
+            let spy = SpyPasteboard(probableURL: true, text: text)
+            let engine = FakeEngine(["/v1/match": noMatch])
+            let h = Harness(engine, clipboardBoost: true, pasteboard: spy)
+            h.start()
+            XCTAssertEqual(spy.readCalls, 1, text)
+            XCTAssertTrue(engine.calls(to: "/v1/handoff/claim").isEmpty, text)
+            XCTAssertEqual(engine.calls(to: "/v1/match").count, 1, text)
+            for c in engine.calls { XCTAssertFalse(String(describing: c.body ?? [:]).contains(text), "clipboard text never sent: \(text)") }
+        }
+    }
+
+    func testClaimNetworkFailureRetriesNextLaunch() throws {
+        for mode in [FakeEngine.Mode.offline, .status(429), .status(503)] {
+            let spy = SpyPasteboard(probableURL: true, text: HANDOFF)
+            let engine = FakeEngine(["/v1/match": noMatch, "/v1/handoff/claim": claimed])
+            engine.modes["/v1/handoff/claim"] = mode
+            let storage = MemoryStorage()
+            let h = Harness(engine, storage: storage, clipboardBoost: true, pasteboard: spy)
+            h.start()
+            XCTAssertEqual(h.events.last?.reason, "network")
+            XCTAssertTrue(engine.calls(to: "/v1/match").isEmpty)
+            XCTAssertNil(storage.getItem(StraitLinks.deferredFlag), "checked again next launch")
+        }
+    }
+
+    func testClaimHandoffTextFromPasteButton() throws {
+        let spy = SpyPasteboard()
+        let engine = FakeEngine(["/v1/handoff/claim": claimed])
+        let storage = MemoryStorage()
+        storage.setItem(StraitLinks.deferredFlag, "1")
+        let h = Harness(engine, storage: storage, pasteboard: spy)
+        var got: LinkEvent?
+        h.strait.claimHandoff(text: HANDOFF) { got = $0 }
+        XCTAssertEqual(got?.matched, true)
+        XCTAssertEqual(got?.route, .clipboard)
+        XCTAssertEqual(engine.calls(to: "/v1/handoff/claim").count, 1)
+        XCTAssertEqual(spy.touched, 0, "the paste button hands the text over; the SDK reads nothing itself")
+    }
+
+    func testClaimHandoffRejectsNonHandoffWithoutNetwork() throws {
+        let engine = FakeEngine(["/v1/handoff/claim": claimed])
+        let h = Harness(engine)
+        var got: LinkEvent?
+        h.strait.claimHandoff(text: "https://links.test/promo") { got = $0 }
+        XCTAssertEqual(got?.matched, false)
+        XCTAssertEqual(got?.reason, "not_handoff")
+        XCTAssertTrue(engine.calls.isEmpty)
+    }
+
+    func testClaimHandoffUnmatchedReason() throws {
+        let engine = FakeEngine(["/v1/handoff/claim": ["matched": false, "reason": "handoff_expired"]])
+        let h = Harness(engine)
+        var got: LinkEvent?
+        h.strait.claimHandoff(text: HANDOFF) { got = $0 }
+        XCTAssertEqual(got?.reason, "handoff_expired")
+        XCTAssertEqual(got?.matched, false)
     }
 }

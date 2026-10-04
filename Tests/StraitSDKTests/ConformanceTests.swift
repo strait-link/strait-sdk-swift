@@ -54,6 +54,14 @@ final class ConformanceTests: XCTestCase {
         }
     }
 
+    func testParseHandoffUrl() throws {
+        for v in try cases("parseHandoffUrl") {
+            let name = try XCTUnwrap(v["name"] as? String)
+            let hosts = try XCTUnwrap(v["linkHosts"] as? [String], name)
+            XCTAssertEqual(parseHandoffUrl(v["text"] as? String, linkHosts: hosts), v["expected"] as? String, name)
+        }
+    }
+
     func testStaleTap() throws {
         for v in try cases("staleTap") {
             let name = try XCTUnwrap(v["name"] as? String)

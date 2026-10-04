@@ -136,6 +136,15 @@ public struct StraitLinksConfig {
     /// `start` observes UIApplication notifications for app-state labelling
     /// (UIKit platforms only). Turn off to feed `onAppState` yourself.
     public var observeLifecycle: Bool
+    /// Clipboard boost (contract B19), iOS only. Default false: the SDK never
+    /// touches the clipboard. When true, the once-per-install deferred check
+    /// first asks iOS (no prompt) whether a web URL is on the clipboard and only
+    /// then reads it, which shows iOS's "Allow Paste" prompt. A Strait handoff
+    /// link copied by your link page gives an exact match; anything else falls
+    /// back to the normal match. Turn on "Clipboard boost" in Dashboard Settings too.
+    public var clipboardBoost: Bool
+    /// The clipboard (tests swap it). Default `UIPasteboard.general`.
+    public var pasteboard: StraitPasteboard
 
     public init(
         publishableKey: String,
@@ -147,7 +156,9 @@ public struct StraitLinksConfig {
         device: @escaping () -> DeviceFields = { Thread.isMainThread ? collectDevice() : DispatchQueue.main.sync(execute: collectDevice) },
         platform: String = "ios",
         callbackQueue: DispatchQueue? = .main,
-        observeLifecycle: Bool = true
+        observeLifecycle: Bool = true,
+        clipboardBoost: Bool = false,
+        pasteboard: StraitPasteboard = SystemPasteboard()
     ) {
         self.publishableKey = publishableKey
         self.endpoint = endpoint
@@ -159,6 +170,8 @@ public struct StraitLinksConfig {
         self.platform = platform
         self.callbackQueue = callbackQueue
         self.observeLifecycle = observeLifecycle
+        self.clipboardBoost = clipboardBoost
+        self.pasteboard = pasteboard
     }
 }
 
@@ -385,6 +398,92 @@ public final class StraitLinks {
         }
     }
 
+    // MARK: Clipboard boost (B19)
+
+    /// Whether the clipboard probably holds a web link, asked WITHOUT reading it
+    /// (iOS shows no prompt). Use it to decide whether to show `StraitPasteButton`.
+    public func handoffAvailable(completion: @escaping (Bool) -> Void) {
+        config.pasteboard.hasProbableWebURL { [self] found in deliver { completion(found) } }
+    }
+
+    /// Claim a Strait handoff link the person pasted (e.g. with Apple's Paste
+    /// button, which shows no prompt). Text that isn't a handoff link for this
+    /// app's link hosts completes with `matched:false, reason:"not_handoff"` and
+    /// sends nothing. The event also goes to `onLink`.
+    public func claimHandoff(text: String?, completion: ((LinkEvent) -> Void)? = nil) {
+        let t0 = config.now()
+        let id = newOpenId(t0)
+        announce(LinkStart(id: id, kind: .deferred, appState: .closed, rawUrl: nil, at: t0))
+        guard let token = parseHandoffUrl(text, linkHosts: linkHosts) else {
+            let e = emit(LinkEvent(
+                id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: false, reason: "not_handoff",
+                rawUrl: nil, url: nil, path: nil, params: nil, linkId: nil, ms: config.now() - t0, at: t0
+            ))
+            return deliver { completion?(e) }
+        }
+        claim(token: token, id: id, t0: t0) { [self] outcome in
+            let e: LinkEvent
+            switch outcome {
+            case let .matched(event): e = event
+            case let .unmatched(reason):
+                e = emit(LinkEvent(
+                    id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: false, reason: reason,
+                    rawUrl: nil, url: nil, path: nil, params: nil, linkId: nil, ms: config.now() - t0, at: t0
+                ))
+            }
+            deliver { completion?(e) }
+        }
+    }
+
+    /// `claimHandoff(text:)` for the items a paste delivered (`UIPasteControl` /
+    /// SwiftUI `PasteButton`): the first URL or text item is claimed.
+    public func claimHandoff(itemProviders: [NSItemProvider], completion: ((LinkEvent) -> Void)? = nil) {
+        guard let provider = itemProviders.first(where: { $0.canLoadObject(ofClass: URL.self) || $0.canLoadObject(ofClass: String.self) }) else {
+            return claimHandoff(text: nil, completion: completion)
+        }
+        if provider.canLoadObject(ofClass: URL.self) {
+            _ = provider.loadObject(ofClass: URL.self) { [self] url, _ in claimHandoff(text: url?.absoluteString, completion: completion) }
+        } else {
+            _ = provider.loadObject(ofClass: String.self) { [self] text, _ in claimHandoff(text: text, completion: completion) }
+        }
+    }
+
+    private enum ClaimOutcome {
+        case matched(LinkEvent)
+        case unmatched(reason: String)
+    }
+
+    /// POST /v1/handoff/claim. `.unmatched("network")` = no answer, 429 or 5xx.
+    private func claim(token: String, id: String, t0: Double, completion: @escaping (ClaimOutcome) -> Void) {
+        let body: [String: Any] = [
+            "publishableKey": config.publishableKey, "token": token, "platform": "ios", "openId": id, "at": Int64(t0),
+        ]
+        call("POST", "/v1/handoff/claim", body) { [self] r in
+            guard case let .success(res) = r, !shouldRetryReport(res.status) else {
+                return completion(.unmatched(reason: "network"))
+            }
+            guard (res.json["matched"] as? Bool) == true else {
+                return completion(.unmatched(reason: (res.json["reason"] as? String) ?? "no_match"))
+            }
+            noteTap(replyClickId(res.json["clickId"]), at: t0)
+            let dest = destination(res.json["longUrl"] as? String)
+            completion(.matched(emit(LinkEvent(
+                id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: true, reason: nil,
+                rawUrl: nil, url: dest.url, path: dest.path, params: dest.params, linkId: res.json["linkId"] as? String,
+                ms: config.now() - t0, at: t0
+            ))))
+        }
+    }
+
+    /// B19 steps 1–3 on the once-per-install check: detect (no prompt), read only
+    /// when a URL is likely (prompt), parse. nil = no handoff token.
+    private func clipboardToken(completion: @escaping (String?) -> Void) {
+        config.pasteboard.hasProbableWebURL { [self] likely in
+            guard likely else { return completion(nil) }
+            completion(parseHandoffUrl(config.pasteboard.readString(), linkHosts: linkHosts))
+        }
+    }
+
     // MARK: Open reports (B14)
 
     /// Open reports saved while offline, waiting to be sent (debugging).
@@ -486,6 +585,30 @@ public final class StraitLinks {
         let t0 = config.now()
         let id = newOpenId(t0)
         announce(LinkStart(id: id, kind: .deferred, appState: .closed, rawUrl: nil, at: t0))
+        // B19: only the once-per-install check, only on iOS, only when the app opted in.
+        guard record && config.clipboardBoost && config.platform == "ios" else {
+            return signalMatch(record: record, id: id, t0: t0, completion: completion)
+        }
+        clipboardToken { [self] token in
+            guard let token = token else { return signalMatch(record: record, id: id, t0: t0, completion: completion) }
+            claim(token: token, id: id, t0: t0) { [self] outcome in
+                switch outcome {
+                case let .matched(e): completion(e)
+                case .unmatched(reason: "network"):
+                    completion(emit(LinkEvent(
+                        id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: false, reason: "network",
+                        rawUrl: nil, url: nil, path: nil, params: nil, linkId: nil, ms: config.now() - t0, at: t0
+                    )))
+                case .unmatched:
+                    // Unknown, used or expired: the normal match, same openId (counted once).
+                    signalMatch(record: record, id: id, t0: t0, completion: completion)
+                }
+            }
+        }
+    }
+
+    /// The signal match (B8): POST /v1/match with the device fields.
+    private func signalMatch(record: Bool, id: String, t0: Double, completion: @escaping (LinkEvent) -> Void) {
         var body = config.device().json
         body["publishableKey"] = config.publishableKey
         body["platform"] = config.platform

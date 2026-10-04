@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.0
+
+- Optional iPhone clipboard boost (shared-spec/SDK-CONTRACT.md B19), **off by default**:
+  `StraitLinksConfig(clipboardBoost: true)`. On the first launch only, the SDK asks iOS
+  whether a web link is on the clipboard (`UIPasteboard.detectPatterns`, no prompt) and
+  only then reads it (iOS shows its paste prompt). A Strait handoff link is claimed via
+  `POST /v1/handoff/claim` for an exact match (`route: .clipboard`); anything else falls
+  back to signal matching. With the default config the clipboard is never touched.
+- `claimHandoff(text:)` / `claimHandoff(itemProviders:)`, `handoffAvailable(completion:)`
+  and `StraitPasteButton` (Apple's `UIPasteControl`, iOS 16+, no prompt).
+- New core function: `parseHandoffUrl(_:linkHosts:)` (conformance vectors v7); new
+  route `clipboard`.
+- Privacy manifest comment corrected: the server keeps a keyed hash (HMAC) of the IP
+  address and of its IPv6 /64, plus the /24 or /48 network prefix, not "a truncated
+  prefix".
+
 ## 0.7.2
 
 - Privacy hardening (shared-spec/SDK-CONTRACT.md B18): the URL sent to `/v1/open` and

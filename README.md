@@ -1,7 +1,9 @@
 # StraitSDK (iOS / Swift)
 
 Deferred deep linking for native iOS — the user taps your link, installs, and
-lands on the right screen. No clipboard paste banner.
+lands on the right screen. Signal matching works with no clipboard and no prompt;
+an optional clipboard boost (off by default) gives an exact match for apps that
+opt in. How it works and what it uses: [How iPhone install matching works](https://straitlink.in/docs/iphone-install-matching/).
 
 Part of [Strait](https://straitlink.in). The match signature is a Swift port kept in lockstep with
 the server and every other SDK via shared golden vectors
@@ -16,7 +18,7 @@ the server and every other SDK via shared golden vectors
 Xcode: **File → Add Package Dependencies…** and paste the repo URL, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.7.2")
+.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.8.0")
 // target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
 <!-- /brand:install -->
@@ -136,12 +138,69 @@ strait.compareFingerprint { json in }  // engine's app-vs-browser comparison
 strait.checkDeferred { event in }      // re-run the deferred check (debugging)
 ```
 
+### Clipboard boost (optional, iOS, contract B19)
+
+By default the SDK finds the tap on first launch by **signal matching**: the
+server compares the tap with the first launch using the IP address (stored only
+as a keyed hash), screen size, language, time zone and iOS version, kept for one
+hour and used only to open the right screen in your app. It never touches the
+clipboard.
+
+For an **exact** match you can opt in to the clipboard boost:
+
+1. Dashboard → Settings → turn on **Clipboard boost**. The "Get the app" button
+   on your iPhone link page then also copies a one-time Strait link
+   (`https://<your-handle>.strait.link/h/<token>`, single use, 24 hours).
+2. In the app:
+
+```swift
+let strait = StraitLinks(StraitLinksConfig(
+    publishableKey: "st_pub_live_…",
+    endpoint: "https://<your-handle>.strait.link",
+    clipboardBoost: true
+))
+```
+
+On the first launch only, the SDK asks iOS whether the clipboard probably holds
+a web link (`UIPasteboard.detectPatterns`, **no prompt**). Only if it does, it
+reads the clipboard, and **iOS shows its "Allow Paste" prompt** at that moment.
+If the person allows it and the text is a Strait handoff link for your link
+hosts, the SDK claims it (`POST /v1/handoff/claim`) and you get the exact
+destination (`route: .clipboard`). Anything else (no link, another site's link,
+a used or expired token, "Don't Allow") falls back to signal matching. Only the
+token is ever sent, never other clipboard text.
+
+**No prompt at all:** show Apple's Paste button instead. iOS shows no prompt
+because the person's tap is the consent (iOS 16+):
+
+```swift
+// UIKit
+if #available(iOS 16.0, *) {
+    let button = StraitPasteButton(straitLinks: strait)
+    button.onResult = { event in /* event.matched, event.url */ }
+    view.addSubview(button)
+}
+
+// SwiftUI
+PasteButton(payloadType: URL.self) { urls in
+    strait.claimHandoff(text: urls.first?.absoluteString)
+}
+```
+
+`strait.handoffAvailable { likely in }` tells you (no prompt) whether a web link
+is on the clipboard, so you can decide whether to show the button.
+
+**Turning matching off:** Dashboard → Settings → **iPhone install matching**.
+When it is off, Strait stores no device signals at the tap and iPhone installs
+are only matched through the clipboard boost (if on). Android installs keep
+using the Play Install Referrer.
+
 ### `LinkEvent`
 
 `id` · `kind` (`direct` / `deferred`) · `route` (`app_link`, `custom_scheme`,
-`fingerprint`) · `appState` (`closed`, `background`, `foreground`) · `matched` ·
+`fingerprint`, `clipboard`) · `appState` (`closed`, `background`, `foreground`) · `matched` ·
 `reason` (`not_found`, `expired`, `password_protected`, `no_match`, `network`,
-`invalid_url`) · `rawUrl` · `url` · `path` · `params` · `linkId` · `ms` · `at`.
+`invalid_url`, `not_handoff`, `handoff_unknown`, `handoff_used`, `handoff_expired`) · `rawUrl` · `url` · `path` · `params` · `linkId` · `ms` · `at`.
 `id` is the open id Strait records the open under (`o_<base36 ms>_<12 chars>`).
 A `LinkStart` with the same `id` fires first, before any network call.
 
@@ -167,6 +226,7 @@ A `LinkStart` with the same `id` fires first, before any network call.
 | B16 every attributed open supplies the tap id (`/v1/resolve` and `/v1/match` reply `clickId`, `replyClickId`) | ✓ |
 | B17 `screenWidth` is the portrait width: `portraitScreenWidth(bounds.width, bounds.height)` in any orientation | ✓ |
 | B18 reported/queued URLs stripped to host + path (+ `utm_source`) via `reportUrl`; expired remembered taps deleted (`staleTap`) | ✓ |
+| B19 clipboard boost: opt-in `clipboardBoost` (default off), `detectPatterns` first (no prompt), read only when a URL is likely, `parseHandoffUrl`, `POST /v1/handoff/claim`, fallback to `/v1/match`; `claimHandoff(text:)` + `StraitPasteButton` | ✓ (B1–B6, B8–B19) |
 
 Both `test-vectors.json` (signature) and `conformance-vectors.json` (pure
 helpers) run under `swift test` in CI.
