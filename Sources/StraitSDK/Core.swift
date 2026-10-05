@@ -278,6 +278,17 @@ public func replyClickId(_ reply: Any?, fallback: String? = nil) -> String? {
     return nil
 }
 
+/// The referral code in a matched deferred reply (`/v1/match`,
+/// `/v1/handoff/claim`), or nil (contract B21, proposal). Only a valid code
+/// (1-64 letters, digits, - or _) counts, kept exactly as sent; anything
+/// else, or an engine that sends no `referralCode`, gives nil.
+public func replyReferralCode(_ reply: Any?) -> String? {
+    guard let r = reply as? String, (1...64).contains(r.utf8.count),
+          r.utf8.allSatisfy({ ($0 >= 0x30 && $0 <= 0x39) || ($0 >= 0x41 && $0 <= 0x5A) || ($0 >= 0x61 && $0 <= 0x7A) || $0 == 0x2D || $0 == 0x5F })
+    else { return nil }
+    return r
+}
+
 /// Whether a failed report should be kept for retry: no answer (nil), 429 or 5xx.
 public func shouldRetryReport(_ status: Int?) -> Bool {
     guard let status = status else { return true }

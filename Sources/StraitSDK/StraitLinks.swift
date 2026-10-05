@@ -34,6 +34,11 @@ public struct LinkEvent: Equatable {
     public let ms: Double
     /// When the link arrived, ms since 1970.
     public let at: Double
+    /// Deferred links only: the referral code the tap carried (the tap's
+    /// `?strait_ref=`, else the link's `referralCode`), when the engine sends
+    /// one. Who invited this install; reward them from your server (the
+    /// `referral.converted` webhook). Referrals are a preview (contract B21).
+    public internal(set) var referralCode: String? = nil
 }
 
 /// Fired the moment a link arrives, before it's resolved (resolving can take a
@@ -470,7 +475,7 @@ public final class StraitLinks {
             completion(.matched(emit(LinkEvent(
                 id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: true, reason: nil,
                 rawUrl: nil, url: dest.url, path: dest.path, params: dest.params, linkId: res.json["linkId"] as? String,
-                ms: config.now() - t0, at: t0
+                ms: config.now() - t0, at: t0, referralCode: replyReferralCode(res.json["referralCode"])
             ))))
         }
     }
@@ -618,18 +623,19 @@ public final class StraitLinks {
         }
         call("POST", "/v1/match", body) { [self] r in
             // No answer, 429 or 5xx = try again next launch (reported as 'network').
-            var matched = false, reason: String? = "network", dest = Destination.none, linkId: String?
+            var matched = false, reason: String? = "network", dest = Destination.none, linkId: String?, referralCode: String?
             if case let .success(res) = r, !shouldRetryReport(res.status) {
                 matched = (res.json["matched"] as? Bool) == true
                 reason = matched ? nil : "no_match"
                 dest = matched ? destination(res.json["longUrl"] as? String) : .none
                 linkId = res.json["linkId"] as? String
+                referralCode = matched ? replyReferralCode(res.json["referralCode"]) : nil
                 if record && matched { noteTap(replyClickId(res.json["clickId"]), at: t0) }
             }
             completion(emit(LinkEvent(
                 id: id, kind: .deferred, route: .fingerprint, appState: .closed, matched: matched, reason: reason,
                 rawUrl: nil, url: dest.url, path: dest.path, params: dest.params, linkId: linkId,
-                ms: config.now() - t0, at: t0
+                ms: config.now() - t0, at: t0, referralCode: referralCode
             )))
         }
     }
