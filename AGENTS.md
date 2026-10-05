@@ -59,8 +59,9 @@ adb shell pm get-app-links <package.name>   # Android only; on iPhone, long-pres
 
 3. Tap a link from WhatsApp or Gmail on a real phone: the app opens on the right screen and `onLink` fires
    with `matched: true`. The tap and the open appear in Dashboard → Analytics.
-4. Deferred (Android): install from a Google Play internal-testing build, tap the link before installing, open
-   the app: `onLink` fires with `kind: deferred`, `route: install_referrer`. iPhone install matching is in beta.
+4. Deferred (iPhone, beta): delete the app, tap the link in Safari, then install your build and open it: `onLink`
+   fires with `kind == .deferred` and `route == .fingerprint` (`.clipboard` with the clipboard boost). iPhone
+   install matching is in beta.
 
 If links open the browser: a missing SHA-256 (most often the Play App Signing key from Play Console → App
 integrity), a typo in the host, or the app was installed before the files were right (reinstall). See
@@ -70,7 +71,7 @@ https://straitlink.in/docs/troubleshooting/.
 
 - Test: `swift build && swift test   # macOS with Xcode (XCTest)` (must pass before any commit; check the exit code).
 - The match signature and the pure helpers are pinned by shared golden vectors
-  (`Tests/**/*vectors*.json`): byte-identical copies live in every SDK and the engine. Never edit a vector file
+  (`Tests/**/*vectors*.json`): byte-identical copies live in every SDK (the signature vectors also in the engine). Never edit a vector file
   here alone; vectors change only through `shared-spec/` and land in every repo together.
 - The package's public identity (name, scope, owner, domain) lives only in `brand.json`; change it with
   `shared-spec/scripts/rename-brand.sh` (all SDKs) or `node scripts/brand.mjs --write`.
