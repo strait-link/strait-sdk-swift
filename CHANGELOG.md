@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Referral codes (preview; shared-spec/proposals/referral-code.md, B21): a matched
+  deferred `LinkEvent` (signal match, clipboard claim, `claimHandoff`) carries
+  `referralCode` when the engine's reply has a valid one. Legacy `MatchResult` decodes
+  `referralCode` too. New public function `replyReferralCode`.
+
 ## 0.8.0
 
 - Optional iPhone clipboard boost (shared-spec/SDK-CONTRACT.md B19), **off by default**:

@@ -200,7 +200,7 @@ using the Play Install Referrer.
 `id` · `kind` (`direct` / `deferred`) · `route` (`app_link`, `custom_scheme`,
 `fingerprint`, `clipboard`) · `appState` (`closed`, `background`, `foreground`) · `matched` ·
 `reason` (`not_found`, `expired`, `password_protected`, `no_match`, `network`,
-`invalid_url`, `not_handoff`, `handoff_unknown`, `handoff_used`, `handoff_expired`) · `rawUrl` · `url` · `path` · `params` · `linkId` · `ms` · `at`.
+`invalid_url`, `not_handoff`, `handoff_unknown`, `handoff_used`, `handoff_expired`) · `rawUrl` · `url` · `path` · `params` · `linkId` · `ms` · `at` · `referralCode` (deferred links only: the referral code the tap carried, when the engine sends one; referrals are a preview and not switched on yet, contract B21; grant rewards from your server via the `referral.converted` webhook).
 `id` is the open id Strait records the open under (`o_<base36 ms>_<12 chars>`).
 A `LinkStart` with the same `id` fires first, before any network call.
 

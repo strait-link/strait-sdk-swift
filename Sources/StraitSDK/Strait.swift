@@ -6,6 +6,8 @@ public struct MatchResult: Decodable, Equatable {
     public let longUrl: String?
     public let linkId: String?
     public let matchMethod: String
+    /// When matched and the tap carried a referral code (preview, contract B21).
+    public var referralCode: String? = nil
 
     public static let none = MatchResult(matched: false, longUrl: nil, linkId: nil, matchMethod: "none")
 }
