@@ -1,6 +1,11 @@
-# StraitSDK (iOS / Swift)
+# Strait SDK for iOS (Swift)
 
-Deferred deep linking for native iOS — the user taps your link, installs, and
+`StraitSDK` (iOS / Swift)
+
+> **Availability:** iPhone install matching: **Beta** (not yet proven on a real iPhone) · SDK: Beta (installed from GitHub).
+> [Platform status](https://straitlink.in/platform-status/) · [Docs](https://straitlink.in/docs/)
+
+Deferred deep linking for native iOS: the user taps your link, installs, and
 lands on the right screen. Signal matching works with no clipboard and no prompt;
 an optional clipboard boost (off by default) gives an exact match for apps that
 opt in. How it works and what it uses: [How iPhone install matching works](https://straitlink.in/docs/iphone-install-matching/).
