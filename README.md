@@ -200,6 +200,21 @@ When it is off, Strait stores no device signals at the tap and iPhone installs
 are only matched through the clipboard boost (if on). Android installs keep
 using the Play Install Referrer.
 
+### Old Firebase page.link links (contract B22)
+
+Moving off Firebase Dynamic Links? People who already have your app can keep opening it from old
+`<x>.page.link` links, as long as Google keeps serving page.link's `apple-app-site-association` (it still
+does today; nobody but Google controls page.link):
+
+1. Keep `applinks:<x>.page.link` in your app's Associated Domains in your next build.
+2. Add the host: `StraitLinksConfig(…, linkHosts: ["<x>.page.link"])`.
+3. Import your old links in the dashboard (Import → Firebase); each keeps its old host and code.
+
+A page.link short link (`https://<x>.page.link/aBcD`) is then looked up like any Strait short link; a long link
+(`https://<x>.page.link/?link=https://…`) opens its `link=` destination on the device, with no network call.
+People without your app still land on whatever Google serves. Covered by unit tests only; **not yet tested on
+a real iPhone**.
+
 ### `LinkEvent`
 
 `id` · `kind` (`direct` / `deferred`) · `route` (`app_link`, `custom_scheme`,
@@ -231,7 +246,8 @@ A `LinkStart` with the same `id` fires first, before any network call.
 | B16 every attributed open supplies the tap id (`/v1/resolve` and `/v1/match` reply `clickId`, `replyClickId`) | ✓ |
 | B17 `screenWidth` is the portrait width: `portraitScreenWidth(bounds.width, bounds.height)` in any orientation | ✓ |
 | B18 reported/queued URLs stripped to host + path (+ `utm_source`) via `reportUrl`; expired remembered taps deleted (`staleTap`) | ✓ |
-| B19 clipboard boost: opt-in `clipboardBoost` (default off), `detectPatterns` first (no prompt), read only when a URL is likely, `parseHandoffUrl`, `POST /v1/handoff/claim`, fallback to `/v1/match`; `claimHandoff(text:)` + `StraitPasteButton` | ✓ (B1–B6, B8–B19) |
+| B19 clipboard boost: opt-in `clipboardBoost` (default off), `detectPatterns` first (no prompt), read only when a URL is likely, `parseHandoffUrl`, `POST /v1/handoff/claim`, fallback to `/v1/match`; `claimHandoff(text:)` + `StraitPasteButton` | ✓ |
+| B22 old Firebase `*.page.link` links: short link → `/v1/resolve` (engine matches the old host + code); long link `/?link=<url>` → the `link` value is the destination, read on the device, no lookup (`pageLinkLongLink`, vectors v8) | ✓ (B1–B6, B8–B19, B22) |
 
 Both `test-vectors.json` (signature) and `conformance-vectors.json` (pure
 helpers) run under `swift test` in CI.

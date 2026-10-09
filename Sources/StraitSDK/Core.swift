@@ -173,7 +173,20 @@ public enum ClassifiedUrl: Equatable {
     case destination(route: LinkRoute, url: String, path: String, params: [String: String], clickId: String?)
 }
 
-/// - https on a Strait link host → `.shortLink`.
+/// The deep link inside an old Firebase Dynamic Links long link (contract B22):
+/// `https://<x>.page.link/?link=<url>&apn=…` → `<url>`. Only on a `*.page.link`
+/// host, only at the root path, only when `link` is an absolute http(s) URL with
+/// a host. Anything else → nil (a page.link short link is resolved by the engine).
+public func pageLinkLongLink(_ p: SplitUrl) -> String? {
+    guard p.host.hasSuffix(".page.link"), p.path == "/" || p.path.isEmpty else { return nil }
+    guard let link = p.params["link"], !link.isEmpty, let inner = splitUrl(link),
+          inner.scheme == "https" || inner.scheme == "http", !inner.host.isEmpty else { return nil }
+    return link.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+/// - https on a Strait link host → `.shortLink`. Except an FDL long link on a
+///   `*.page.link` link host (B22): its `link=` value IS the destination, read on
+///   the device with no network call.
 /// - other https (a verified link on the customer's own site) → it IS the destination.
 /// - yourapp://host/path (browser hand-off) → destination https://host/path.
 /// A `strait_click` tap id is removed from the destination and returned apart.
@@ -182,6 +195,10 @@ public func classifyUrl(_ raw: String, linkHosts: [String]) -> ClassifiedUrl? {
     guard let p0 = splitUrl(raw) else { return nil }
     let isWeb = p0.scheme == "https" || p0.scheme == "http"
     if isWeb && linkHosts.map({ $0.lowercased() }).contains(p0.host) {
+        if let long = pageLinkLongLink(p0),
+           case let .destination(_, url, path, params, clickId)? = classifyUrl(long, linkHosts: []) {
+            return .destination(route: .appLink, url: url, path: path, params: params, clickId: clickId)
+        }
         return .shortLink
     }
     let taken = takeClickId(raw)

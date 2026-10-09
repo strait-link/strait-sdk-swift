@@ -203,6 +203,32 @@ final class DirectLinkTests: XCTestCase {
         XCTAssertEqual(h.events.last?.url, "https://shop.example/p/42?color=red")
     }
 
+    // B22: old Firebase page.link links.
+    func testPageLinkShortLinkIsResolvedWithHost() throws {
+        let h = Harness(FakeEngine(["/v1/resolve": ["matched": true, "longUrl": "https://shop.example/p/7", "linkId": "lnk_7", "slug": "aBcD", "recorded": true]]),
+                        linkHosts: ["acme.page.link"])
+        h.start()
+        h.strait.handle(url: URL(string: "https://acme.page.link/aBcD")!)
+        XCTAssertEqual(h.engine.calls(to: "/v1/resolve").first?.body?["url"] as? String, "https://acme.page.link/aBcD")
+        let e = try XCTUnwrap(h.events.last)
+        XCTAssertTrue(e.matched)
+        XCTAssertEqual(e.url, "https://shop.example/p/7")
+        XCTAssertEqual(e.linkId, "lnk_7")
+    }
+
+    func testPageLinkLongLinkOpensDestinationWithoutLookup() throws {
+        let h = Harness(FakeEngine(["/v1/open": ["ok": true]]), linkHosts: ["acme.page.link"])
+        h.start()
+        h.strait.handle(url: URL(string: "https://acme.page.link/?link=https%3A%2F%2Fshop.example%2Fp%2F42%3Fcolor%3Dred&apn=com.acme.app")!)
+        let e = try XCTUnwrap(h.events.last)
+        XCTAssertEqual(e.route, .appLink)
+        XCTAssertTrue(e.matched)
+        XCTAssertEqual(e.url, "https://shop.example/p/42?color=red")
+        XCTAssertEqual(e.path, "/p/42")
+        XCTAssertEqual(e.params, ["color": "red"])
+        XCTAssertTrue(h.engine.calls(to: "/v1/resolve").isEmpty)
+    }
+
     func testExpiredShortLinkIsReported() throws {
         let h = Harness(FakeEngine(["/v1/resolve": ["matched": false, "reason": "expired"]]))
         h.start("https://links.test/old")
