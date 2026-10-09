@@ -179,13 +179,16 @@ let strait = StraitLinks(StraitLinksConfig(
 ))
 ```
 
-On the first launch only, the SDK asks iOS whether the clipboard probably holds
-a web link (`UIPasteboard.detectPatterns`, **no prompt**). Only if it does, it
-reads the clipboard, and **iOS shows its "Allow Paste" prompt** at that moment.
-If the person allows it and the text is a Strait handoff link for your link
-hosts, the SDK claims it (`POST /v1/handoff/claim`) and you get the exact
-destination (`route: .clipboard`). Anything else (no link, another site's link,
-a used or expired token, "Don't Allow") falls back to signal matching. Only the
+On the first launch only, the SDK runs device matching first (`POST /v1/match`).
+If that finds the install, the clipboard is never touched and no prompt shows.
+Only if it finds no match (or the request fails), the SDK asks iOS whether the
+clipboard probably holds a web link (`UIPasteboard.detectPatterns`, **no
+prompt**). Only if it does, it reads the clipboard, and **iOS shows its "Allow
+Paste" prompt** at that moment. If the person allows it and the text is a Strait
+handoff link for your link hosts, the SDK claims it (`POST /v1/handoff/claim`)
+and you get the exact destination (`route: .clipboard`). Anything else (no link,
+another site's link, a used or expired token, "Don't Allow") keeps the device
+match result. Both attempts share one `openId`, so one install is one event. Only the
 token is ever sent, never other clipboard text.
 
 **No prompt at all:** show Apple's Paste button instead. iOS shows no prompt
@@ -208,8 +211,9 @@ PasteButton(payloadType: URL.self) { urls in
 `strait.handoffAvailable { likely in }` tells you (no prompt) whether a web link
 is on the clipboard, so you can decide whether to show the button.
 
-When `clipboardBoost` is on, the SDK checks the clipboard first on the first
-launch (it is exact when present) and falls back to device matching otherwise.
+When `clipboardBoost` is on, the SDK still tries device matching first on the
+first launch and reads the clipboard only when that finds nothing. The Paste
+button is unaffected: it claims whatever the person pastes, whenever they tap it.
 
 **Turning device matching off:** Dashboard → Settings → **Device matching
 (primary)**. When it is off, Strait stores no device signals at the tap, erases

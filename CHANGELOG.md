@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Clipboard boost order (B19): the first-launch deferred check now runs device matching
+  (`/v1/match`) first; the clipboard is read and the handoff claimed only when that returns
+  no match or fails. A device match no longer shows iOS's "Allow Paste" prompt. Both attempts
+  share one `openId` and only the final `LinkEvent` is emitted. `StraitPasteButton` is unchanged.
 - Store sheet (beta): `StraitLinks.openStoreSheet(url:options:presenter:completion:)` (also
   `Strait.openStoreSheet(_:…)`) shows `SKStoreProductViewController` or `SKOverlay` inside your
   app after `POST /v1/store-sheet`, saves the device match for that tap (`/v1/match-save`) and,

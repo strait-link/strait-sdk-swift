@@ -143,10 +143,11 @@ public struct StraitLinksConfig {
     public var observeLifecycle: Bool
     /// Clipboard boost (contract B19), iOS only. Default false: the SDK never
     /// touches the clipboard. When true, the once-per-install deferred check
-    /// first asks iOS (no prompt) whether a web URL is on the clipboard and only
-    /// then reads it, which shows iOS's "Allow Paste" prompt. A Strait handoff
-    /// link copied by your link page gives an exact match; anything else falls
-    /// back to the normal match. Turn on "Clipboard boost" in Dashboard Settings too.
+    /// runs device matching first (primary); only if that finds no match (or
+    /// fails) does it ask iOS (no prompt) whether a web URL is on the clipboard
+    /// and only then read it, which shows iOS's "Allow Paste" prompt. A Strait
+    /// handoff link copied by your link page gives an exact match; anything
+    /// else keeps the device match result. Turn on "Clipboard boost" in Dashboard Settings too.
     public var clipboardBoost: Bool
     /// The clipboard (tests swap it). Default `UIPasteboard.general`.
     public var pasteboard: StraitPasteboard
@@ -591,28 +592,33 @@ public final class StraitLinks {
         let id = newOpenId(t0)
         announce(LinkStart(id: id, kind: .deferred, appState: .closed, rawUrl: nil, at: t0))
         // B19: only the once-per-install check, only on iOS, only when the app opted in.
-        guard record && config.clipboardBoost && config.platform == "ios" else {
-            return signalMatch(record: record, id: id, t0: t0, completion: completion)
-        }
-        clipboardToken { [self] token in
-            guard let token = token else { return signalMatch(record: record, id: id, t0: t0, completion: completion) }
-            claim(token: token, id: id, t0: t0) { [self] outcome in
-                switch outcome {
-                case let .matched(e): completion(e)
-                case .unmatched(reason: "network"):
-                    completion(emit(LinkEvent(
-                        id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: false, reason: "network",
-                        rawUrl: nil, url: nil, path: nil, params: nil, linkId: nil, ms: config.now() - t0, at: t0
-                    )))
-                case .unmatched:
-                    // Unknown, used or expired: the normal match, same openId (counted once).
-                    signalMatch(record: record, id: id, t0: t0, completion: completion)
+        let boost = record && config.clipboardBoost && config.platform == "ios"
+        // Device matching first (primary). The clipboard is read only when it
+        // finds nothing, so a device match never triggers iOS's paste prompt.
+        signalMatch(record: record, id: id, t0: t0) { [self] matchEvent in
+            guard boost && !matchEvent.matched else { return completion(emit(matchEvent)) }
+            clipboardToken { [self] token in
+                guard let token = token else { return completion(emit(matchEvent)) }
+                // Same openId as the match, so the install is counted once.
+                claim(token: token, id: id, t0: t0) { [self] outcome in
+                    switch outcome {
+                    case let .matched(e): completion(e)
+                    case .unmatched(reason: "network"):
+                        completion(emit(LinkEvent(
+                            id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: false, reason: "network",
+                            rawUrl: nil, url: nil, path: nil, params: nil, linkId: nil, ms: config.now() - t0, at: t0
+                        )))
+                    case .unmatched:
+                        // Unknown, used or expired: report the device match result.
+                        completion(emit(matchEvent))
+                    }
                 }
             }
         }
     }
 
-    /// The signal match (B8): POST /v1/match with the device fields.
+    /// The signal match (B8): POST /v1/match with the device fields. The event
+    /// is NOT emitted here; `runDeferred` emits it (or the clipboard result).
     private func signalMatch(record: Bool, id: String, t0: Double, completion: @escaping (LinkEvent) -> Void) {
         var body = config.device().json
         body["publishableKey"] = config.publishableKey
@@ -632,11 +638,11 @@ public final class StraitLinks {
                 referralCode = matched ? replyReferralCode(res.json["referralCode"]) : nil
                 if record && matched { noteTap(replyClickId(res.json["clickId"]), at: t0) }
             }
-            completion(emit(LinkEvent(
+            completion(LinkEvent(
                 id: id, kind: .deferred, route: .fingerprint, appState: .closed, matched: matched, reason: reason,
                 rawUrl: nil, url: dest.url, path: dest.path, params: dest.params, linkId: linkId,
                 ms: config.now() - t0, at: t0, referralCode: referralCode
-            )))
+            ))
         }
     }
 
