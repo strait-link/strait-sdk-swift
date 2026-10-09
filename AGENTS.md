@@ -30,7 +30,7 @@ import StraitSDK
 
 let links = StraitLinks(StraitLinksConfig(
     publishableKey: "st_pub_live_…",     // never the secret key
-    endpoint: "https://acme.strait.link"     // the workspace's link domain
+    endpoint: "https://hilltop.strait.link"  // the workspace's link domain ("Hilltop Shoes" is a made-up shop)
 ))
 links.onLink { event in                  // replays past events
     guard event.matched, let path = event.path else { return }
@@ -42,6 +42,30 @@ links.onLink { event in                  // replays past events
   `links.handle(userActivity:)` in `scene(_:continue:)`, `links.handle(url:)` in `scene(_:openURLContexts:)`.
 - SwiftUI: `init() { links.start() }`, then `.onOpenURL { links.handle(url: $0) }` and
   `.onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { links.handle(userActivity: $0) }`.
+
+## Stop and ask the human
+
+These steps need a person; you can't do them from code. Ask, then continue:
+
+- **Sign-up and keys:** create the workspace at https://app.straitlink.in and copy the publishable key
+  (`st_pub_live_…`). There is no sign-up API.
+- **Dashboard settings:** the Apple Team ID, bundle ID and custom scheme go in Dashboard → Settings (there is no
+  settings API yet). Ask for the values, or ask the human to save them.
+- **Xcode signing:** the Associated Domains capability needs the human's Apple developer account.
+- **A real iPhone:** only a person can tap a link on a device. iPhone install matching is in beta, so tell them
+  a deferred match on iPhone is not yet proven on a real device.
+- **App Store / TestFlight upload**, and any change to the secret key (`st_live_…`): always the human.
+
+## Verify loop (run in this order, no phone needed until step 5)
+
+1. `curl https://<handle>.strait.link/.well-known/apple-app-site-association`: `TeamID.bundleId` is listed.
+2. `curl "https://strait.link/v1/tools/app-links?domain=<handle>.strait.link"` (no key) or the checker at
+   https://straitlink.in/tools/ (MCP tool: `check_app_links`): no errors for iOS.
+3. `curl "https://strait.link/v1/simulate?url=https://<handle>.strait.link/<slug>&ua=iphone&publishableKey=st_pub_live_…"`
+   (dry run: no tap recorded, not billed; https://straitlink.in/docs/api/): `decision` and `location` are what you
+   expect.
+4. `swift build && swift test` in this repo, or the app's own tests: check the exit code is 0.
+5. Then the human taps the link on a real iPhone (see below).
 
 ## Verify
 

@@ -252,3 +252,16 @@ It's safe to include in your app. Never put your secret key (`st_live_…`) in a
 
 Collects only coarse device fields (screen width, scale, language, timezone);
 the **server** adds the observed IP and computes the match signature.
+
+## Support
+
+- **Stuck on install or a link that opens the browser?** Start with
+  [Troubleshooting](https://straitlink.in/docs/troubleshooting/) and the free
+  [App Links / AASA checker](https://straitlink.in/tools/).
+- **Email:** [support@straitlink.in](mailto:support@straitlink.in). Include your
+  workspace handle, the SDK version (see CHANGELOG.md), the iOS version and the
+  link you tapped. Replies within 1 working day, IST.
+- **Bugs and feature requests:** open an issue on this repository.
+- **Security issues:** report privately to security@straitlink.in, never in a
+  public issue (see SECURITY.md).
+- **Service status:** [status.strait.link](https://status.strait.link).
