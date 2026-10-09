@@ -1,0 +1,57 @@
+# Simulator-only sample app that integrates StraitSDK from this repo.
+# Generate + test (no Apple Developer account needed):
+#   cd Examples/SimVerify && xcodegen generate
+#   STRAIT_ENDPOINT=https://<handle>.strait.link STRAIT_PK=st_pub_… \
+#   xcodebuild test -project SimVerify.xcodeproj -scheme SimVerify \
+#     -destination 'platform=iOS Simulator,name=iPhone 17'
+# The UI tests read TEST_RUNNER_STRAIT_* env vars (xcodebuild strips the prefix).
+name: SimVerify
+options:
+  bundleIdPrefix: link.strait.example
+  deploymentTarget:
+    iOS: "16.0"
+packages:
+  StraitSDK:
+    path: ../..
+targets:
+  SimVerify:
+    type: application
+    platform: iOS
+    sources: [SimVerify]
+    dependencies:
+      - package: StraitSDK
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: link.strait.example.simverify
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        SWIFT_VERSION: "5.0"
+    info:
+      path: SimVerify/Info.plist
+      properties:
+        CFBundleDisplayName: SimVerify
+        UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleURLName: link.strait.example.simverify
+            CFBundleURLSchemes: [straitsim]
+  SimVerifyUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [SimVerifyUITests]
+    dependencies:
+      - target: SimVerify
+    settings:
+      base:
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  SimVerify:
+    build:
+      targets:
+        SimVerify: all
+        SimVerifyUITests: [test]
+    test:
+      targets: [SimVerifyUITests]
