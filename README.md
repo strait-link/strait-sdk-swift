@@ -200,6 +200,41 @@ When it is off, Strait stores no device signals at the tap and iPhone installs
 are only matched through the clipboard boost (if on). Android installs keep
 using the Play Install Referrer.
 
+### Store sheet (beta; iPhone is beta)
+
+When a user taps **Install** for one of your other apps (a sibling, partner or
+"lite" app), show the App Store *inside your app* and keep the deep link for the
+app being installed.
+
+```swift
+strait.openStoreSheet(
+    url: "https://<handle>.strait.link/promo",
+    options: StoreSheetOptions(style: .productPage), // or .overlay (SKOverlay, iOS 14+)
+    presenter: SystemStoreSheetPresenter(from: viewController)
+) { result in
+    // result.opened, result.method ("product_page" | "overlay" | "none"), result.reason
+}
+```
+
+What it does:
+
+1. `POST /v1/store-sheet` records the tap (`sent_to = store_sheet`, not billed
+   during the beta) and returns the App Store id and the link's campaign, sent
+   as the `ct` campaign token.
+2. Unless the workspace turned iPhone install matching off, it saves this
+   device's match fields for that tap (`POST /v1/match-save`). The installed
+   app's normal deferred check finds it. iPhone matching is beta.
+3. With `copyHandoffLink: true` and the workspace's clipboard boost on, it also
+   copies the one-time handoff link; an installed app with `clipboardBoost: true`
+   claims it for an exact match. Off by default, because it replaces what the
+   user had copied.
+4. It shows `SKStoreProductViewController` (the full product page as a sheet)
+   or `SKOverlay`. Pass `providerToken` / `customProductPageId` if you use them.
+
+It works only where your app is the host. A link tapped inside another
+company's app can't open a store sheet there. Offline, pass `appStoreId` to
+still show the store (the deep link is not kept then, `reason = "offline"`).
+
 ### `LinkEvent`
 
 `id` · `kind` (`direct` / `deferred`) · `route` (`app_link`, `custom_scheme`,

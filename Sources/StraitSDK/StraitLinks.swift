@@ -197,7 +197,7 @@ public final class StraitLinks {
     /// events for 7 days (contract B15): `{"clickId":…,"at":<ms>}`.
     public static let tapKey = "strait.lastTap"
 
-    private let config: StraitLinksConfig
+    let config: StraitLinksConfig
     private let base: String
     private let linkHosts: [String]
     private let tracker = AppStateTracker()
@@ -744,14 +744,14 @@ public final class StraitLinks {
         }
     }
 
-    private struct Reply {
+    struct Reply {
         let ok: Bool
         let status: Int
         let json: [String: Any]
     }
 
     /// JSON over the transport (bodies built with JSONSerialization — B11).
-    private func call(_ method: String, _ path: String, _ body: [String: Any]?, completion: @escaping (Result<Reply, Error>) -> Void) {
+    func call(_ method: String, _ path: String, _ body: [String: Any]?, completion: @escaping (Result<Reply, Error>) -> Void) {
         guard let url = URL(string: base + path) else { return completion(.failure(StraitLinksError.badEndpoint)) }
         var req = URLRequest(url: url)
         req.httpMethod = method
@@ -785,7 +785,7 @@ public final class StraitLinks {
         return e
     }
 
-    private func deliver(_ block: @escaping () -> Void) {
+    func deliver(_ block: @escaping () -> Void) {
         if let q = config.callbackQueue { q.async(execute: block) } else { block() }
     }
 

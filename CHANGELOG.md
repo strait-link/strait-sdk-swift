@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Store sheet (beta): `StraitLinks.openStoreSheet(url:options:presenter:completion:)` (also
+  `Strait.openStoreSheet(_:…)`) shows `SKStoreProductViewController` or `SKOverlay` inside your
+  app after `POST /v1/store-sheet`, saves the device match for that tap (`/v1/match-save`) and,
+  opt-in, copies the clipboard-boost handoff link. New `StoreSheet`, `StoreProduct`,
+  `StoreSheetOptions`, `StoreSheetResult`, `StoreSheetPresenting`, `SystemStoreSheetPresenter`
+  (iOS), `StraitPasteboardWriting` (`SystemPasteboard` conforms).
 - Referral codes (preview; shared-spec/proposals/referral-code.md, B21): a matched
   deferred `LinkEvent` (signal match, clipboard claim, `claimHandoff`) carries
   `referralCode` when the engine's reply has a valid one. Legacy `MatchResult` decodes
