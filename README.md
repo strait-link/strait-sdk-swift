@@ -6,9 +6,11 @@
 > [Platform status](https://straitlink.in/platform-status/) · [Docs](https://straitlink.in/docs/)
 
 Deferred deep linking for native iOS: the user taps your link, installs, and
-lands on the right screen. Signal matching works with no clipboard and no prompt;
-an optional clipboard boost (off by default) gives an exact match for apps that
-opt in. How it works and what it uses: [How iPhone install matching works](https://straitlink.in/docs/iphone-install-matching/).
+lands on the right screen. On iPhone, **device matching** is the primary method
+(on by default, no clipboard, no prompt) and **paste handoff** (the clipboard
+boost, off by default) is the secondary method for apps that opt in. Each is a
+workspace switch in Dashboard → Settings → iPhone installs. Navigating, not
+tracking: the signals route one tap and are never used to build profiles. How it works and what it uses: [How iPhone install matching works](https://straitlink.in/docs/iphone-install-matching/).
 
 Part of [Strait](https://straitlink.in). The match signature is a Swift port kept in lockstep with
 the server and every other SDK via shared golden vectors
@@ -143,17 +145,28 @@ strait.compareFingerprint { json in }  // engine's app-vs-browser comparison
 strait.checkDeferred { event in }      // re-run the deferred check (debugging)
 ```
 
-### Clipboard boost (optional, iOS, contract B19)
+### Device matching (primary) and paste handoff (secondary), iOS
 
-By default the SDK finds the tap on first launch by **signal matching**: the
+By default the SDK finds the tap on first launch by **device matching**: the
 server compares the tap with the first launch using the IP address (stored only
-as a keyed hash), screen size, language, time zone and iOS version, kept for one
-hour and used only to open the right screen in your app. It never touches the
-clipboard.
+as a keyed hash), its network block and provider, screen size, language, time
+zone and iOS version. It is navigating, not tracking: the signals are used only
+to open the right screen in your app, one tap gives at most one match, and
+nothing is used for profiles or advertising. A tap can be matched for **1 hour**;
+the server's nightly cleanup erases its signals once that hour is a day old, so
+they are gone **within about 2 days of the tap** (at most 49 hours). Device
+matching never touches the clipboard.
 
-For an **exact** match you can opt in to the clipboard boost:
+Apple's rules say apps may not fingerprint devices, even with permission.
+Device matching sits close to that line, so if you'd rather not take the App
+Review risk, use **Switch to paste only** in Dashboard → Settings → iPhone
+installs (device matching off, paste handoff on).
 
-1. Dashboard → Settings → turn on **Clipboard boost**. The "Get the app" button
+### Paste handoff (clipboard boost, optional, contract B19)
+
+For an **exact** match you can opt in to paste handoff:
+
+1. Dashboard → Settings → turn on **Paste handoff (fallback)**. The "Get the app" button
    on your iPhone link page then also copies a one-time Strait link
    (`https://<your-handle>.strait.link/h/<token>`, single use, 24 hours).
 2. In the app:
@@ -195,9 +208,13 @@ PasteButton(payloadType: URL.self) { urls in
 `strait.handoffAvailable { likely in }` tells you (no prompt) whether a web link
 is on the clipboard, so you can decide whether to show the button.
 
-**Turning matching off:** Dashboard → Settings → **iPhone install matching**.
-When it is off, Strait stores no device signals at the tap and iPhone installs
-are only matched through the clipboard boost (if on). Android installs keep
+When `clipboardBoost` is on, the SDK checks the clipboard first on the first
+launch (it is exact when present) and falls back to device matching otherwise.
+
+**Turning device matching off:** Dashboard → Settings → **Device matching
+(primary)**. When it is off, Strait stores no device signals at the tap, erases
+the ones already stored for the workspace, and iPhone installs are only matched
+through paste handoff (if on). Android installs keep
 using the Play Install Referrer.
 
 ### Store sheet (beta; iPhone is beta)
