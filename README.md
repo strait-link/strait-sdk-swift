@@ -1,9 +1,34 @@
-# Strait SDK for iOS (Swift)
+<!-- Header: the same in every Strait SDK README (design system v5). -->
+<p align="center">
+  <a href="https://straitlink.in">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/strait-lockup-dark.svg">
+      <img src=".github/assets/strait-lockup.svg" alt="Strait" width="160" height="53">
+    </picture>
+  </a>
+</p>
+
+<h1 align="center">Strait SDK for iOS</h1>
+
+<p align="center"><strong>Straight to the screen. On the record.</strong><br>
+A tap opens the exact screen, and every link open and install is recorded in your Strait dashboard.</p>
+
+<p align="center">
+  <a href="https://github.com/bazingga08/strait-sdk-swift/tags"><img alt="Latest version" src="https://img.shields.io/github/v/tag/bazingga08/strait-sdk-swift?sort=semver&label=version&style=flat-square&labelColor=0F0D0A&color=423B33"></a>
+  <a href="https://straitlink.in/platform-status/"><img alt="SDK: Beta" src="https://img.shields.io/badge/SDK-beta-423B33?style=flat-square&labelColor=0F0D0A"></a>
+  <a href="https://straitlink.in/docs/iphone-install-matching/"><img alt="iPhone: Beta" src="https://img.shields.io/badge/iPhone-beta-423B33?style=flat-square&labelColor=0F0D0A"></a>
+  <a href="https://github.com/bazingga08/strait-sdk-swift/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/bazingga08/strait-sdk-swift/ci.yml?branch=main&label=CI&style=flat-square&labelColor=0F0D0A&color=423B33"></a>
+  <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-423B33?style=flat-square&labelColor=0F0D0A"></a>
+</p>
+
+<p align="center">
+  <a href="https://straitlink.in/docs/sdks/ios/">Docs</a> ·
+  <a href="https://straitlink.in/platform-status/">Platform status</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="#docs-and-support">Talk to the Strait team</a>
+</p>
 
 `StraitSDK` (iOS / Swift)
-
-> **Availability:** iPhone install matching: **Beta** (not yet proven on a real iPhone) · SDK: Beta (installed from GitHub).
-> [Platform status](https://straitlink.in/platform-status/) · [Docs](https://straitlink.in/docs/)
 
 Deferred deep linking for native iOS: the user taps your link, installs, and
 lands on the right screen. On iPhone, **you choose the method** in Dashboard →
@@ -12,9 +37,6 @@ clipboard), both, or neither; device matching is off by default for new
 workspaces. The SDK reads your choice from Strait on the first
 launch, so changing it needs no app update. Navigating, not
 tracking: the signals route one tap and are never used to build profiles. How it works and what it uses: [How iPhone install matching works](https://straitlink.in/docs/iphone-install-matching/).
-
-**Straight to the screen. On the record.** A tap opens the exact screen, and
-each link open and install is recorded in your Strait dashboard.
 
 Part of [Strait](https://straitlink.in). The match signature is a Swift port kept in lockstep with
 the server and every other SDK via shared golden vectors
@@ -25,7 +47,21 @@ the server and every other SDK via shared golden vectors
 > proven on a real iPhone: the signable reference app and the scripted real-device
 > proof are ready in [`Examples/StraitReference`](Examples/StraitReference/README.md).
 
-## Install (Swift Package Manager)
+## Platform features
+
+| Feature | Status | Notes |
+|---|---|---|
+| Direct links: Universal Links and custom schemes | ◐ Beta | Not yet proven on a real iPhone. |
+| iPhone install matching (deferred links) | ◐ Beta | Your choice in Dashboard → Settings → iPhone installs: device matching, paste handoff, both or neither, read from Strait at runtime. Device matching is off by default. iPhone matches are labelled Estimated until measured. |
+| Paste button (`StraitPasteButton`, iOS 16+) | ◐ Beta | Apple's system Paste control in Strait colours; the tap is the consent, so no paste prompt. |
+| Store sheet: the App Store inside your app | ◐ Beta | Keeps the deep link through the install. |
+| Swift Package Manager | ● Live | From this repo's version tags. |
+
+● Live · ◐ Beta · ○ Planned · – Not yet. The same words as the [platform status](https://straitlink.in/platform-status/) page.
+
+## Install
+
+Swift Package Manager:
 
 <!-- brand:install -->
 Xcode: **File → Add Package Dependencies…** and paste the repo URL, or in `Package.swift`:
@@ -239,6 +275,31 @@ is on the clipboard, so you can decide whether to show the button.
 The Paste button works whatever the switches say: it claims whatever the person
 pastes, whenever they tap it.
 
+**How it looks.** `StraitPasteButton` draws Apple's Paste control in the Strait design
+system (v5): the orange fill `#FF6A13` with ink text `#0F0D0A` (6.8:1, WCAG AA) in light and
+dark, 8 pt corners, icon and label, and at least 44 pt tall. It has no animation of its own.
+To match your app instead, pass a configuration:
+
+```swift
+let config = UIPasteControl.Configuration()
+config.baseBackgroundColor = .label           // your colours
+config.baseForegroundColor = .systemBackground
+let button = StraitPasteButton(straitLinks: strait, configuration: config)
+// StraitPasteButton.straitConfiguration() is the default
+```
+
+| Light | Dark |
+|---|---|
+| ![Paste button, light](.github/assets/paste-button-light.png) | ![Paste button, dark](.github/assets/paste-button-dark.png) |
+
+### Design tokens
+
+`StraitTokens` (generated from the Strait brand tokens v5, `Sources/StraitSDK/StraitTokens.swift`;
+never edit it by hand) carries the semantic colours for light and dark, spacing, radii, type
+sizes and durations. `StraitTokens.dynamic(\.brand)` gives a `UIColor` that follows the system
+appearance; `StraitTokens.light.brand.color` a SwiftUI `Color`. Durations are seconds: use 0 when
+`UIAccessibility.isReduceMotionEnabled`.
+
 ### Store sheet (beta; iPhone is beta)
 
 When a user taps **Install** for one of your other apps (a sibling, partner or
@@ -386,15 +447,9 @@ It's safe to include in your app. Never put your secret key (`st_live_…`) in a
 Collects only coarse device fields (screen width, scale, language, timezone);
 the **server** adds the observed IP and computes the match signature.
 
-## Support
+## Docs and support
 
-- **Stuck on install or a link that opens the browser?** Start with
-  [Troubleshooting](https://straitlink.in/docs/troubleshooting/) and the free
-  [App Links / AASA checker](https://straitlink.in/tools/).
-- **Email:** [support@straitlink.in](mailto:support@straitlink.in). Include your
-  workspace handle, the SDK version (see CHANGELOG.md), the iOS version and the
-  link you tapped. Replies within 1 working day, IST.
-- **Bugs and feature requests:** open an issue on this repository.
-- **Security issues:** report privately to security@straitlink.in, never in a
-  public issue (see SECURITY.md).
-- **Service status:** [status.strait.link](https://status.strait.link).
+- **Docs:** [straitlink.in/docs/sdks/ios/](https://straitlink.in/docs/sdks/ios/) · [platform status](https://straitlink.in/platform-status/) · [troubleshooting](https://straitlink.in/docs/troubleshooting/)
+- **Talk to the Strait team:** [support@straitlink.in](mailto:support@straitlink.in) (replies within 1 working day, IST) or call +91 81218 61890.
+- **Bugs and feature requests:** [open an issue](https://github.com/bazingga08/strait-sdk-swift/issues) on this repo.
+- **Security:** never in a public issue. Write to security@straitlink.in (see [SECURITY.md](SECURITY.md)).

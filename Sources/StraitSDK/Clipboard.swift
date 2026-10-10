@@ -54,6 +54,10 @@ public struct SystemPasteboard: StraitPasteboard {
 /// Show it on first launch (for example when `StraitLinks.handoffAvailable`
 /// says a URL is on the clipboard); a pasted Strait handoff link is claimed via
 /// `StraitLinks.claimHandoff(text:)` and the result arrives on `onLink` (and `onResult`).
+///
+/// By default it is drawn in the Strait design system (v5): the orange fill `#FF6A13` with ink
+/// text `#0F0D0A` (6.8:1) in light and dark, 8 pt corners, icon and label, at least 44 pt tall.
+/// Pass your own `UIPasteControl.Configuration` to match your app instead.
 @available(iOS 16.0, *)
 public final class StraitPasteButton: UIView {
     public let straitLinks: StraitLinks
@@ -61,7 +65,19 @@ public final class StraitPasteButton: UIView {
     public var onResult: ((LinkEvent) -> Void)?
     public let control: UIPasteControl
 
-    public init(straitLinks: StraitLinks, configuration: UIPasteControl.Configuration = UIPasteControl.Configuration()) {
+    /// The Strait look for Apple's Paste control (design system v5): brand fill, on-brand
+    /// text, `Radius.md` corners, icon and label. The colours follow light / dark.
+    public static func straitConfiguration() -> UIPasteControl.Configuration {
+        let c = UIPasteControl.Configuration()
+        c.displayMode = .iconAndLabel
+        c.cornerStyle = .fixed
+        c.cornerRadius = CGFloat(StraitTokens.Radius.md)
+        c.baseBackgroundColor = StraitTokens.dynamic(\.brand)
+        c.baseForegroundColor = StraitTokens.dynamic(\.onBrand)
+        return c
+    }
+
+    public init(straitLinks: StraitLinks, configuration: UIPasteControl.Configuration = StraitPasteButton.straitConfiguration()) {
         self.straitLinks = straitLinks
         self.control = UIPasteControl(configuration: configuration)
         super.init(frame: .zero)
@@ -74,6 +90,8 @@ public final class StraitPasteButton: UIView {
             control.trailingAnchor.constraint(equalTo: trailingAnchor),
             control.topAnchor.constraint(equalTo: topAnchor),
             control.bottomAnchor.constraint(equalTo: bottomAnchor),
+            // A 44 pt touch target (WCAG 2.5.8, Apple HIG).
+            control.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
         ])
     }
 
