@@ -8,9 +8,13 @@
 Deferred deep linking for native iOS: the user taps your link, installs, and
 lands on the right screen. On iPhone, **you choose the method** in Dashboard →
 Settings → iPhone installs: **device matching**, **paste handoff** (the
-clipboard), both, or neither. The SDK reads your choice from Strait on the first
+clipboard), both, or neither; device matching is off by default for new
+workspaces. The SDK reads your choice from Strait on the first
 launch, so changing it needs no app update. Navigating, not
 tracking: the signals route one tap and are never used to build profiles. How it works and what it uses: [How iPhone install matching works](https://straitlink.in/docs/iphone-install-matching/).
+
+**Straight to the screen. On the record.** A tap opens the exact screen, and
+each link open and install is recorded in your Strait dashboard.
 
 Part of [Strait](https://straitlink.in). The match signature is a Swift port kept in lockstep with
 the server and every other SDK via shared golden vectors
@@ -40,7 +44,7 @@ import StraitSDK
 let strait = StraitLinks(StraitLinksConfig(
     publishableKey: "st_pub_live_…",
     endpoint: "https://<your-handle>.strait.link",
-    linkHosts: ["links.yourbrand.com"]   // extra short-link domains: URLs or bare hosts
+    linkHosts: ["links.yourbrand.com"]   // extra short-link domains (custom domains, coming soon): URLs or bare hosts
 ))
 
 strait.onLinkStart { start in showOpeningLink(start.id) }   // loading state
@@ -145,7 +149,7 @@ strait.compareFingerprint { json in }  // engine's app-vs-browser comparison
 strait.checkDeferred { event in }      // re-run the deferred check (debugging)
 ```
 
-### iPhone: you choose the deferred-link method
+### iPhone (beta): you choose the deferred-link method
 
 Dashboard → Settings → **iPhone installs** has two switches. You make the choice,
 and it applies at runtime: on the first launch the SDK asks Strait

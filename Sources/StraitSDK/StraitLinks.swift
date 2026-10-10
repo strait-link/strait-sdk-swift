@@ -124,7 +124,7 @@ public struct StraitLinksConfig {
     public var publishableKey: String
     /// Your Strait link host, e.g. https://go.yourbrand.com
     public var endpoint: String
-    /// Extra hosts that serve your short links (custom domains), as
+    /// Extra hosts that serve your short links (custom domains, coming soon), as
     /// `https://go.brand.com` or `go.brand.com`.
     public var linkHosts: [String]
     /// Persists `strait.deferredChecked` and `strait.pendingOpens`. Default: `UserDefaults.standard`.
