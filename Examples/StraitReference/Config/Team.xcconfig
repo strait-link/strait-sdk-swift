@@ -1,0 +1,10 @@
+// Written by scripts/set-team.sh. Do not edit by hand: run
+//   scripts/set-team.sh <TEAM_ID> <BUNDLE_PREFIX> [<link host>]
+//
+// DEVELOPMENT_TEAM empty = the placeholder team: the project still builds for
+// a device with signing off (scripts/build-device.sh), it just can't install.
+DEVELOPMENT_TEAM =
+// App = $(BUNDLE_PREFIX).reference, App Clip = $(BUNDLE_PREFIX).reference.Clip
+BUNDLE_PREFIX = in.straitlink
+// The Strait workspace link host the app claims (applinks:/appclips:).
+STRAIT_LINK_HOST = strait-dev.strait.link

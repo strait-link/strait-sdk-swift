@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Real-device readiness (beta): `Examples/StraitReference`, a signable reference app
+  (xcodegen) with Universal Links (`applinks:<host>`, UIKit scenes so a cold start is
+  `closed`), the `straitref://` fallback, store sheet, Paste button, a Settings screen with
+  the live runtime choice and an AASA check, an optional App Clip (`STRAIT_APP_CLIP=1`),
+  `scripts/set-team.sh`, `build-device.sh`, `device-proof.sh` (XCUITest on a connected
+  iPhone) and `testflight.sh` (archive + `-exportArchive` upload). Test plan in
+  `Examples/StraitReference/TEST-PLAN.md`.
+- `StraitLinks.lastInstallSettings` / `InstallSettings` / `replyInstallSettings(_:at:)`:
+  the workspace's iPhone choice from the latest `/v1/match` reply, for settings and debug
+  screens (never stored; nil before an answer or with an older engine).
+- `StraitAppClip` (beta): App Clip -> full app handoff through a shared App Group
+  (`saveInvocation` in the App Clip, `takeInvocation` once in the full app, 7-day window,
+  https only), passed to `start(initialURL:)` for an exact deferred link.
+
 - iPhone deferred-link method chosen by the customer at runtime (founder decision 10 Oct 2026):
   the once-per-install check reads the workspace's choice from the `/v1/match` reply
   (`ios.pasteHandoff`, Dashboard → Settings → iPhone installs) and reads the clipboard only

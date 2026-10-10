@@ -1,0 +1,51 @@
+# The reference app PLUS its App Clip (beta). Use: STRAIT_APP_CLIP=1 scripts/generate.sh
+#
+# The App Clip opens from a link on the workspace host (AASA "appclips", set the
+# App Clip bundle ID in Dashboard -> Settings -> App configuration), saves the
+# exact link in the shared App Group, and offers the full app. The full app's
+# first launch takes that link (StraitAppClip.takeInvocation) and opens it: an
+# exact deferred deep link with no device matching and no clipboard.
+include:
+  - project.yml
+targets:
+  StraitReference:
+    dependencies:
+      - target: StraitReferenceClip
+        embed: true
+    settings:
+      base:
+        STRAIT_APP_CLIP: "YES"
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: StraitReference/Debug-AppGroup.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: StraitReference/Release-AppGroup.entitlements
+  StraitReferenceClip:
+    type: application.on-demand-install-capable
+    platform: iOS
+    sources:
+      - path: StraitReferenceClip
+        excludes: ["*.entitlements"]
+    dependencies:
+      - package: StraitSDK
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(STRAIT_CLIP_BUNDLE_ID)
+        PRODUCT_NAME: StraitReferenceClip
+        CODE_SIGN_ENTITLEMENTS: StraitReferenceClip/StraitReferenceClip.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+    info:
+      path: StraitReferenceClip/Info.plist
+      properties:
+        CFBundleDisplayName: Strait Ref
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        ITSAppUsesNonExemptEncryption: false
+        NSAppClip:
+          NSAppClipRequestEphemeralUserNotification: false
+          NSAppClipRequestLocationConfirmation: false
+        StraitLinkHost: $(STRAIT_LINK_HOST)
+        StraitPublishableKey: $(STRAIT_PUBLISHABLE_KEY)
+        StraitAppGroup: $(STRAIT_APP_GROUP)

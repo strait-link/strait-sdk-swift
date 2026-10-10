@@ -312,6 +312,44 @@ public func replyPasteHandoff(_ reply: [String: Any]) -> Bool {
     (reply["ios"] as? [String: Any])?["pasteHandoff"] as? Bool == true
 }
 
+/// The workspace's live iPhone deferred-link choice (Dashboard Settings ->
+/// iPhone installs) as the engine reported it in a `/v1/match` reply (B19).
+/// For display and diagnostics only: the SDK itself acts on each reply and
+/// never stores the choice.
+public struct InstallSettings: Equatable {
+    /// `ios.deviceMatching`: the tap page records device signals and the match may use them.
+    public let deviceMatching: Bool
+    /// `ios.pasteHandoff`: "Get the app" copies a one-time link the SDK may claim.
+    public let pasteHandoff: Bool
+    /// When the reply was received (ms since 1970).
+    public let at: Double
+
+    public init(deviceMatching: Bool, pasteHandoff: Bool, at: Double) {
+        self.deviceMatching = deviceMatching
+        self.pasteHandoff = pasteHandoff
+        self.at = at
+    }
+
+    /// One of the four combinations, as the dashboard names them.
+    public var summary: String {
+        switch (deviceMatching, pasteHandoff) {
+        case (true, true): return "Device matching first, then paste handoff"
+        case (true, false): return "Device matching only"
+        case (false, true): return "Paste handoff only"
+        case (false, false): return "Neither (no deferred link on iPhone)"
+        }
+    }
+}
+
+/// The `ios` object of a `/v1/match` reply, or nil when the reply has none
+/// (an older engine, or a non-iOS platform). A missing or non-boolean field
+/// reads as off, like `replyPasteHandoff`.
+public func replyInstallSettings(_ reply: [String: Any], at: Double) -> InstallSettings? {
+    guard let ios = reply["ios"] as? [String: Any] else { return nil }
+    return InstallSettings(deviceMatching: ios["deviceMatching"] as? Bool == true,
+                           pasteHandoff: ios["pasteHandoff"] as? Bool == true, at: at)
+}
+
 /// A clipboard-boost handoff token as the tap page mints it: 128 random bits, base64url (B19).
 private let handoffToken = try! NSRegularExpression(pattern: "^[A-Za-z0-9_-]{22}$")
 private let handoffLink = try! NSRegularExpression(

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Universal Links on the workspace host (Release / TestFlight). -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:$(STRAIT_LINK_HOST)</string>
+	</array>
+	<!-- Shared with the App Clip: it leaves the invocation link here (StraitAppClip). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>$(STRAIT_APP_GROUP)</string>
+	</array>
+</dict>
+</plist>

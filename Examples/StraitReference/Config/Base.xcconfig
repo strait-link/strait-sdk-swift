@@ -1,0 +1,11 @@
+// Shared build settings for the Strait reference app and its App Clip.
+#include "Team.xcconfig"
+// Optional, gitignored: STRAIT_PUBLISHABLE_KEY = st_pub_… (see Local.xcconfig.example).
+#include? "Local.xcconfig"
+
+STRAIT_APP_BUNDLE_ID = $(BUNDLE_PREFIX).reference
+STRAIT_CLIP_BUNDLE_ID = $(STRAIT_APP_BUNDLE_ID).Clip
+// One App Group shared by the app and the App Clip (the App Clip handoff).
+STRAIT_APP_GROUP = group.$(STRAIT_APP_BUNDLE_ID)
+STRAIT_URL_SCHEME = straitref
+CODE_SIGN_STYLE = Automatic

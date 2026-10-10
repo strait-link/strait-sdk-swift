@@ -220,6 +220,7 @@ public final class StraitLinks {
     /// Completions of the flush that's queued or running, nil when none.
     private var flushWaiters: [() -> Void]?
     private var observers: [NSObjectProtocol] = []
+    private var installSettings: InstallSettings?
 
     public init(_ config: StraitLinksConfig) {
         self.config = config
@@ -230,6 +231,12 @@ public final class StraitLinks {
     }
 
     deinit { removeObservers() }
+
+    /// The workspace's iPhone deferred-link choice from the most recent
+    /// `/v1/match` reply in this process (the first-launch check or
+    /// `checkDeferred`), or nil before any answer. For a settings or debug
+    /// screen; the SDK never stores it and acts on each reply as it arrives.
+    public var lastInstallSettings: InstallSettings? { withLock { installSettings } }
 
     // MARK: Lifecycle
 
@@ -643,6 +650,7 @@ public final class StraitLinks {
             var pasteHandoff = false
             if case let .success(res) = r, !shouldRetryReport(res.status) {
                 pasteHandoff = replyPasteHandoff(res.json)
+                if let settings = replyInstallSettings(res.json, at: config.now()) { withLock { installSettings = settings } }
                 matched = (res.json["matched"] as? Bool) == true
                 reason = matched ? nil : "no_match"
                 dest = matched ? destination(res.json["longUrl"] as? String) : .none

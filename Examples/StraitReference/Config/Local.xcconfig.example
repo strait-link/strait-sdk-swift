@@ -1,0 +1,4 @@
+// Copy to Local.xcconfig (gitignored) to bake the workspace's PUBLISHABLE key
+// into builds you install from Xcode or TestFlight. It is the public key that
+// ships inside apps (st_pub_…), never a secret key (st_sk_…).
+STRAIT_PUBLISHABLE_KEY = st_pub_REPLACE_ME

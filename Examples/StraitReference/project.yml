@@ -1,0 +1,97 @@
+# Strait reference app: a real, signable iOS app wired to StraitSDK from this
+# repo. Universal Links (applinks:), the custom-scheme fallback, the store
+# sheet, the paste button and a settings screen with the live runtime choice.
+#
+#   scripts/set-team.sh <TEAM_ID> <BUNDLE_PREFIX> [<link host>]   # once
+#   scripts/generate.sh                     # project.yml -> StraitReference.xcodeproj
+#   STRAIT_APP_CLIP=1 scripts/generate.sh   # + the App Clip target (beta)
+#   scripts/build-device.sh                 # generic iOS device build, signing off
+#
+# Team, bundle prefix and link host live in Config/Team.xcconfig (set-team.sh).
+name: StraitReference
+options:
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+packages:
+  StraitSDK:
+    path: ../..
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+targets:
+  StraitReference:
+    type: application
+    platform: iOS
+    sources:
+      - path: StraitReference
+        excludes: ["*.entitlements"]
+    dependencies:
+      - package: StraitSDK
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(STRAIT_APP_BUNDLE_ID)
+        PRODUCT_NAME: StraitReference
+        INFOPLIST_KEY_CFBundleDisplayName: Strait Ref
+        STRAIT_APP_CLIP: "NO"
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: StraitReference/Debug.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: StraitReference/Release.entitlements
+    info:
+      path: StraitReference/Info.plist
+      properties:
+        CFBundleDisplayName: Strait Ref
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        ITSAppUsesNonExemptEncryption: false
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+        # The custom-scheme fallback (straitref://…), for when Universal Links
+        # don't fire (typed URLs, some in-app browsers).
+        CFBundleURLTypes:
+          - CFBundleURLName: $(STRAIT_APP_BUNDLE_ID)
+            CFBundleURLSchemes: [$(STRAIT_URL_SCHEME)]
+        # Read by ReferenceConfig at runtime (build settings from Config/*.xcconfig).
+        StraitLinkHost: $(STRAIT_LINK_HOST)
+        StraitPublishableKey: $(STRAIT_PUBLISHABLE_KEY)
+        StraitAppGroup: $(STRAIT_APP_GROUP)
+        StraitAppClip: $(STRAIT_APP_CLIP)
+        StraitAppIdPrefix: $(AppIdentifierPrefix)
+        StraitURLScheme: $(STRAIT_URL_SCHEME)
+  StraitReferenceUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [StraitReferenceUITests]
+    dependencies:
+      - target: StraitReference
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(STRAIT_APP_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: StraitReference
+schemes:
+  StraitReference:
+    build:
+      targets:
+        StraitReference: all
+        StraitReferenceUITests: [test]
+    test:
+      config: Debug
+      targets: [StraitReferenceUITests]
+    archive:
+      config: Release

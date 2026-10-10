@@ -20,8 +20,10 @@ Part of [Strait](https://straitlink.in). The match signature is a Swift port kep
 the server and every other SDK via shared golden vectors
 (run by `swift test` in CI). 32-bit hash overflow is matched with `Int32` + `&*`.
 
-> ⚠️ Verified by CI (`swift test` on macOS) against the golden vectors. Wire-up
-> into a real app + on-device deferred-install verification still needs Xcode.
+> ⚠️ Verified by CI (`swift test` on macOS) against the golden vectors and on the
+> iOS simulator (Safari tap -> deferred match, custom scheme, paste button). Not yet
+> proven on a real iPhone: the signable reference app and the scripted real-device
+> proof are ready in [`Examples/StraitReference`](Examples/StraitReference/README.md).
 
 ## Install (Swift Package Manager)
 
@@ -271,6 +273,65 @@ What it does:
 It works only where your app is the host. A link tapped inside another
 company's app can't open a store sheet there. Offline, pass `appStoreId` to
 still show the store (the deep link is not kept then, `reason = "offline"`).
+
+### Showing the live choice (settings or debug screens)
+
+```swift
+if let s = strait.lastInstallSettings {   // from the latest /v1/match reply, nil before one
+    print(s.summary)                       // "Device matching only", "Paste handoff only", …
+    print(s.deviceMatching, s.pasteHandoff)
+}
+strait.checkDeferred { _ in /* re-asks Strait (adds no installs); lastInstallSettings updates */ }
+```
+
+It is for display only: the SDK acts on each reply as it arrives and never stores
+the choice. An engine older than the runtime-choice release sends no `ios` object,
+so it stays nil.
+
+### App Clip handoff (beta)
+
+If your app ships an App Clip, a link on your link host can open the App Clip with
+the exact URL. Save it in an App Group both targets share; the full app's first
+launch takes it once and opens it, an exact deferred deep link with no device
+matching and no clipboard:
+
+```swift
+// App Clip
+.onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+    if let url = activity.webpageURL, let group = StraitAppClip.storage(appGroup: "group.com.yourco.app") {
+        StraitAppClip.saveInvocation(url, storage: group)
+    }
+}
+
+// Full app, before start
+let clipURL = StraitAppClip.storage(appGroup: "group.com.yourco.app")
+    .flatMap { StraitAppClip.takeInvocation(storage: $0) }
+strait.start(initialURL: clipURL)   // nil = the normal deferred check
+```
+
+Both targets need the same App Groups capability; the App Clip needs
+`appclips:<your host>` in Associated Domains, and its bundle ID
+(`<app bundle ID>.Clip`) saved in Dashboard → Settings → App configuration, so
+your link host's `apple-app-site-association` lists it under `appclips`. A saved
+link is usable for 7 days and handed over once.
+
+### Real iPhone checklist (beta)
+
+1. Xcode → Signing & Capabilities: your team; **Associated Domains** →
+   `applinks:<handle>.strait.link`; your custom scheme under URL Types.
+2. Dashboard → Settings → App configuration: the same Apple Team ID (10
+   characters, Membership details on developer.apple.com) and bundle ID.
+3. `curl -sD - https://<handle>.strait.link/.well-known/apple-app-site-association`
+   answers `200`, `application/json`, no redirect, with `appIDs: ["TEAMID.bundle"]`.
+   Apple's copy: `https://app-site-association.cdn-apple.com/a/v1/<handle>.strait.link`.
+4. Install on the phone (Developer Mode on). Tap a link from Notes or Messages:
+   a typed URL or a link on the same host never opens the app.
+5. During development add `applinks:<host>?mode=developer` and turn on Settings →
+   Developer → Associated Domains Development to skip Apple's CDN cache.
+
+[`Examples/StraitReference`](Examples/StraitReference/README.md) does all of this
+with one script (`scripts/set-team.sh TEAMID BUNDLE_PREFIX`) and proves it with an
+XCUITest on a connected iPhone (`scripts/device-proof.sh`).
 
 ### `LinkEvent`
 

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The full app this App Clip belongs to. -->
+	<key>com.apple.developer.parent-application-identifiers</key>
+	<array>
+		<string>$(AppIdentifierPrefix)$(STRAIT_APP_BUNDLE_ID)</string>
+	</array>
+	<!-- Links on the workspace host may open this App Clip (AASA "appclips"). -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>appclips:$(STRAIT_LINK_HOST)</string>
+	</array>
+	<!-- Shared with the full app: the invocation link is left here (StraitAppClip). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>$(STRAIT_APP_GROUP)</string>
+	</array>
+</dict>
+</plist>
