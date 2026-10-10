@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Design system v5: `StraitPasteButton` now defaults to the Strait look
+  (`StraitPasteButton.straitConfiguration()`): the orange fill `#FF6A13` with ink text
+  `#0F0D0A` (6.8:1) in light and dark, 8 pt corners, icon and label, at least 44 pt tall.
+  Pass a `UIPasteControl.Configuration` to keep your own colours. New `StraitTokens`
+  (generated from brand v5: colours light / dark, spacing, radii, type, durations) and
+  `StraitTokens.dynamic(_:)` / `StraitColor.uiColor` for UIKit. Tests check the brand colour,
+  AA contrast and that no blue or cool grey is in the palette.
+- README: the common Strait SDK header (logo, promise, badges, links), a platform features
+  table with the iPhone beta truth, Paste button screenshots, and "Docs and support".
 - iPhone deferred-link method chosen by the customer at runtime (founder decision 10 Oct 2026):
   the once-per-install check reads the workspace's choice from the `/v1/match` reply
   (`ios.pasteHandoff`, Dashboard → Settings → iPhone installs) and reads the clipboard only
