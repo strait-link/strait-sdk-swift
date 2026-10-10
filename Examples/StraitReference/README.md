@@ -17,6 +17,12 @@ What it shows:
 | Paste | Apple's Paste button (`StraitPasteButton`, no prompt) and the no-prompt clipboard check |
 | Settings | The **live runtime choice** from Strait's `/v1/match` reply (device matching / paste handoff, set in Dashboard → Settings → iPhone installs), this build's App ID and associated domain, and a direct check that the workspace AASA lists this app |
 
+Look: the Strait design system (v5), light and dark, from the SDK's generated `StraitTokens`
+(`StraitReference/StraitTheme.swift`): warm grounds and card surfaces instead of the system's
+cool greys, buttons and links in brand-text (`#B84200` light, `#FF8237` dark), the orange fill
+only for the one primary action (the Paste button, the App Clip's "Get the full app"), system
+fonts and no motion of its own.
+
 ## One-time setup (when the Apple team exists)
 
 ```sh

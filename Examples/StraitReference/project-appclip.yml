@@ -26,6 +26,7 @@ targets:
     sources:
       - path: StraitReferenceClip
         excludes: ["*.entitlements"]
+      - path: StraitReference/StraitTheme.swift
     dependencies:
       - package: StraitSDK
     settings:

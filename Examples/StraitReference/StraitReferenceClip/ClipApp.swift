@@ -56,10 +56,14 @@ struct ClipView: View {
             Text(state.invocation?.absoluteString ?? "Open me from a link on the workspace host")
                 .font(.footnote.monospaced()).multilineTextAlignment(.center).accessibilityIdentifier("clipInvocation")
             if !state.destination.isEmpty { Text("Goes to \(state.destination)").accessibilityIdentifier("clipDestination") }
-            Text(state.saved ? "Saved for the full app (App Group)" : "Not saved yet").font(.footnote).accessibilityIdentifier("clipSaved")
-            Button("Get the full app") { overlayShown = true }.buttonStyle(.borderedProminent)
+            Text(state.saved ? "Saved for the full app (App Group)" : "Not saved yet").font(.footnote)
+                .foregroundColor(Color.strait(\.textMuted)).accessibilityIdentifier("clipSaved")
+            Button("Get the full app") { overlayShown = true }.buttonStyle(StraitPrimaryButtonStyle())
         }
         .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.strait(\.bg).ignoresSafeArea())
+        .foregroundColor(Color.strait(\.text))
         .appStoreOverlay(isPresented: $overlayShown) { SKOverlay.AppClipConfiguration(position: .bottom) }
     }
 }

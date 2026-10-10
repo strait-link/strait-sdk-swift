@@ -33,7 +33,7 @@ struct SettingsView: View {
                     Text("Live runtime choice (Dashboard → Settings → iPhone installs)")
                 } footer: {
                     Text("Read from Strait's /v1/match reply, never from this build: flip a switch in the dashboard, tap Ask Strait now, and this changes with no app update. Asking adds no installs.")
-                }
+                }.straitRows()
 
                 Section("This build") {
                     LabeledRow("Bundle ID", ReferenceConfig.bundleId, id: "bundleId")
@@ -42,14 +42,14 @@ struct SettingsView: View {
                     LabeledRow("URL scheme", "\(ReferenceConfig.urlScheme)://", id: "urlScheme")
                     LabeledRow("App Clip", ReferenceConfig.appClipEnabled ? "on (\(ReferenceConfig.appGroup))" : "off", id: "appClip")
                     LabeledRow("SDK", "StraitSDK (this repo)", id: "sdk")
-                }
+                }.straitRows()
 
                 Section {
                     Button("Check apple-app-site-association") { checkAasa() }.accessibilityIdentifier("checkAasa")
                     if !aasa.isEmpty { Text(aasa).font(.footnote.monospaced()).accessibilityIdentifier("aasaResult") }
                 } footer: {
                     Text("Fetches https://\(ReferenceConfig.linkHost)/.well-known/apple-app-site-association directly and checks it lists this App ID. Phones read it through Apple's CDN, which can lag behind.")
-                }
+                }.straitRows()
 
                 Section {
                     TextField("Endpoint", text: $endpoint).textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -67,8 +67,9 @@ struct SettingsView: View {
                     Text("Workspace")
                 } footer: {
                     Text("Only the publishable key belongs in an app. The once-per-install check runs again on the next cold start after Forget; a real first install (delete the app, install from TestFlight) is the stronger test.")
-                }
+                }.straitRows()
             }
+            .straitScreen()
             .navigationTitle("Settings")
         }
         .navigationViewStyle(.stack)
