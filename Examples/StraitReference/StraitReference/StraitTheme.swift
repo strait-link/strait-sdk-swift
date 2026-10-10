@@ -64,3 +64,18 @@ struct StraitPrimaryButtonStyle: ButtonStyle {
             )
     }
 }
+
+/// A List / Form section header in the warm text-muted token. The system's default
+/// (secondaryLabel) is a cool lavender grey in dark mode, which the design system rules out.
+struct StraitHeader: View {
+    private let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View { Text(text).foregroundColor(Color.strait(\.textMuted)) }
+}
+
+/// A List / Form section footer in the warm text-muted token (AA on bg-subtle in both themes).
+struct StraitFooter: View {
+    private let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View { Text(text).foregroundColor(Color.strait(\.textMuted)) }
+}

@@ -30,25 +30,25 @@ struct SettingsView: View {
                     .disabled(model.links == nil || asking)
                     .accessibilityIdentifier("askStrait")
                 } header: {
-                    Text("Live runtime choice (Dashboard → Settings → iPhone installs)")
+                    StraitHeader("Live runtime choice (Dashboard → Settings → iPhone installs)")
                 } footer: {
-                    Text("Read from Strait's /v1/match reply, never from this build: flip a switch in the dashboard, tap Ask Strait now, and this changes with no app update. Asking adds no installs.")
+                    StraitFooter("Read from Strait's /v1/match reply, never from this build: flip a switch in the dashboard, tap Ask Strait now, and this changes with no app update. Asking adds no installs.")
                 }.straitRows()
 
-                Section("This build") {
+                Section {
                     LabeledRow("Bundle ID", ReferenceConfig.bundleId, id: "bundleId")
                     LabeledRow("App ID", ReferenceConfig.appId.nonEmpty ?? "unsigned (no Team ID)", id: "appId")
                     LabeledRow("Associated domain", "applinks:\(ReferenceConfig.linkHost)", id: "associatedDomain")
                     LabeledRow("URL scheme", "\(ReferenceConfig.urlScheme)://", id: "urlScheme")
                     LabeledRow("App Clip", ReferenceConfig.appClipEnabled ? "on (\(ReferenceConfig.appGroup))" : "off", id: "appClip")
                     LabeledRow("SDK", "StraitSDK (this repo)", id: "sdk")
-                }.straitRows()
+                } header: { StraitHeader("This build") }.straitRows()
 
                 Section {
                     Button("Check apple-app-site-association") { checkAasa() }.accessibilityIdentifier("checkAasa")
                     if !aasa.isEmpty { Text(aasa).font(.footnote.monospaced()).accessibilityIdentifier("aasaResult") }
                 } footer: {
-                    Text("Fetches https://\(ReferenceConfig.linkHost)/.well-known/apple-app-site-association directly and checks it lists this App ID. Phones read it through Apple's CDN, which can lag behind.")
+                    StraitFooter("Fetches https://\(ReferenceConfig.linkHost)/.well-known/apple-app-site-association directly and checks it lists this App ID. Phones read it through Apple's CDN, which can lag behind.")
                 }.straitRows()
 
                 Section {
@@ -64,9 +64,9 @@ struct SettingsView: View {
                     }
                     if resetDone { Text("Done. Quit the app from the app switcher and open it again.").font(.footnote) }
                 } header: {
-                    Text("Workspace")
+                    StraitHeader("Workspace")
                 } footer: {
-                    Text("Only the publishable key belongs in an app. The once-per-install check runs again on the next cold start after Forget; a real first install (delete the app, install from TestFlight) is the stronger test.")
+                    StraitFooter("Only the publishable key belongs in an app. The once-per-install check runs again on the next cold start after Forget; a real first install (delete the app, install from TestFlight) is the stronger test.")
                 }.straitRows()
             }
             .straitScreen()

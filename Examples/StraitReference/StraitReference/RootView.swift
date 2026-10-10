@@ -25,28 +25,28 @@ struct LinksView: View {
     var body: some View {
         NavigationView {
             List {
-                Section("Status") {
+                Section {
                     Text(model.links == nil ? "Not configured: add the publishable key in Settings" : "SDK started")
                         .accessibilityIdentifier("sdkStatus")
                     LabeledRow("Screen", model.screen, id: "screen")
                     LabeledRow("Launch link", model.launchSource, id: "launchSource")
                     Text(model.lastEvent).font(.footnote.monospaced()).accessibilityIdentifier("lastEvent")
                     Text("events=\(model.events.count)").accessibilityIdentifier("eventCount")
-                }.straitRows()
+                } header: { StraitHeader("Status") }.straitRows()
                 Section {
                     Button("Open https://\(ReferenceConfig.linkHost)/ref-test") { openOwnLink() }
                         .accessibilityIdentifier("selfCheck")
                     if !selfCheck.isEmpty { Text(selfCheck).font(.footnote).accessibilityIdentifier("selfCheckResult") }
                 } header: {
-                    Text("Universal Link self-check")
+                    StraitHeader("Universal Link self-check")
                 } footer: {
-                    Text("Asks iOS to open a link on the workspace host as a Universal Link only. \"Claimed\" means this phone downloaded the AASA and links on this host open this app. Real taps still need the Notes / Messages test.")
+                    StraitFooter("Asks iOS to open a link on the workspace host as a Universal Link only. \"Claimed\" means this phone downloaded the AASA and links on this host open this app. Real taps still need the Notes / Messages test.")
                 }.straitRows()
-                Section("Events (newest first)") {
+                Section {
                     ForEach(Array(model.events.enumerated()), id: \.offset) { _, line in
                         Text(line).font(.caption.monospaced())
                     }
-                }.straitRows()
+                } header: { StraitHeader("Events (newest first)") }.straitRows()
             }
             .straitScreen()
             .navigationTitle("Strait reference")
@@ -79,7 +79,7 @@ struct StoreSheetView: View {
                         .accessibilityIdentifier("storeLink")
                     TextField("App Store ID (optional override)", text: $appStoreId).keyboardType(.numberPad)
                 } footer: {
-                    Text("One of your Strait links. The engine records the tap and answers the App Store ID (Dashboard → Settings → App configuration), then the SDK shows the App Store inside this app and keeps the deep link for the app being installed.")
+                    StraitFooter("One of your Strait links. The engine records the tap and answers the App Store ID (Dashboard → Settings → App configuration), then the SDK shows the App Store inside this app and keeps the deep link for the app being installed.")
                 }.straitRows()
                 Section {
                     Button("Show product page (SKStoreProductViewController)") { open(.productPage) }
@@ -88,7 +88,7 @@ struct StoreSheetView: View {
                         .accessibilityIdentifier("storeOverlay")
                 }.straitRows()
                 if !result.isEmpty {
-                    Section("Result") { Text(result).font(.footnote.monospaced()).accessibilityIdentifier("storeResult") }.straitRows()
+                    Section { Text(result).font(.footnote.monospaced()).accessibilityIdentifier("storeResult") } header: { StraitHeader("Result") }.straitRows()
                 }
             }
             .straitScreen()
@@ -125,19 +125,19 @@ struct PasteView: View {
                         Text("Not configured")
                     }
                 } header: {
-                    Text("Apple's Paste button (no prompt)")
+                    StraitHeader("Apple's Paste button (no prompt)")
                 } footer: {
-                    Text("Claims a Strait handoff link (https://<host>/h/<token>) the person copied with \"Get the app\". The tap is the consent, so iOS shows no \"Allow Paste\" prompt. It works whatever the dashboard switches say.")
+                    StraitFooter("Claims a Strait handoff link (https://<host>/h/<token>) the person copied with \"Get the app\". The tap is the consent, so iOS shows no \"Allow Paste\" prompt. It works whatever the dashboard switches say.")
                 }.straitRows()
-                Section("Clipboard check (no prompt)") {
+                Section {
                     Button("Does the clipboard hold a web link?") {
                         model.links?.handoffAvailable { v in DispatchQueue.main.async { likely = v } }
                     }
                     if let likely = likely { Text(likely ? "Probably a web link" : "No web link").accessibilityIdentifier("handoffAvailable") }
-                }.straitRows()
-                Section("Last event") {
+                } header: { StraitHeader("Clipboard check (no prompt)") }.straitRows()
+                Section {
                     Text(model.lastEvent).font(.footnote.monospaced())
-                }.straitRows()
+                } header: { StraitHeader("Last event") }.straitRows()
             }
             .straitScreen()
             .navigationTitle("Paste handoff")
