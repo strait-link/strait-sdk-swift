@@ -13,8 +13,8 @@ import UIKit
 //    when the workspace turned the clipboard boost on, a one-time handoff link.
 // 2. The SDK saves this device's match fields for that tap (POST /v1/match-save),
 //    so the installed app's normal deferred check (/v1/match) finds it. With
-//    `copyHandoffLink` it also copies the handoff link; an installed app with
-//    `clipboardBoost: true` claims it for an exact match.
+//    `copyHandoffLink` it also copies the handoff link; the installed app claims
+//    it for an exact match when the workspace has the paste handoff on (B19).
 // 3. The SDK shows SKStoreProductViewController (a full product page as a
 //    sheet) or SKOverlay (a small banner) through a `StoreSheetPresenting`.
 //

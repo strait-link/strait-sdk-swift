@@ -304,6 +304,14 @@ public func newOpenId(_ now: Double, random: () -> Double = { Double.random(in: 
     return "o_\(String(Int64(now), radix: 36))_\(r)"
 }
 
+/// The workspace's live paste-handoff choice in a `/v1/match` reply (B19):
+/// `ios.pasteHandoff`, set in Dashboard Settings -> iPhone installs. Anything
+/// else (an older engine without the field, a non-boolean) means off. The SDK
+/// reads it on each check and never stores it, so no app release is needed.
+public func replyPasteHandoff(_ reply: [String: Any]) -> Bool {
+    (reply["ios"] as? [String: Any])?["pasteHandoff"] as? Bool == true
+}
+
 /// A clipboard-boost handoff token as the tap page mints it: 128 random bits, base64url (B19).
 private let handoffToken = try! NSRegularExpression(pattern: "^[A-Za-z0-9_-]{22}$")
 private let handoffLink = try! NSRegularExpression(

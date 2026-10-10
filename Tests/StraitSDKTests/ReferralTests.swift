@@ -27,8 +27,8 @@ final class ReferralTests: XCTestCase {
 
     func testClipboardClaimAndPasteButtonCarryTheCode() throws {
         let claim = with(["matchMethod": "clipboard", "referralCode": "ASHA42"])
-        let h = Harness(FakeEngine(["/v1/match": ["matched": false], "/v1/handoff/claim": claim]),
-                        clipboardBoost: true, pasteboard: SpyPasteboard(probableURL: true, text: handoff))
+        let h = Harness(FakeEngine(["/v1/match": ["matched": false, "ios": ["deviceMatching": true, "pasteHandoff": true]], "/v1/handoff/claim": claim]),
+                        pasteboard: SpyPasteboard(probableURL: true, text: handoff))
         h.start()
         XCTAssertEqual(h.events.last?.route, .clipboard)
         XCTAssertEqual(h.events.last?.referralCode, "ASHA42")

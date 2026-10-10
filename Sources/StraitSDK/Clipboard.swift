@@ -7,8 +7,10 @@ import UniformTypeIdentifiers
 #endif
 
 /// The clipboard, behind one protocol so the SDK's use of it is testable
-/// (contract B19). The SDK calls it ONLY when `StraitLinksConfig.clipboardBoost`
-/// is true, only on the once-per-install deferred check, and only on iOS.
+/// (contract B19). The SDK calls it ONLY when the workspace turned the paste
+/// handoff on (read live from the engine's `/v1/match` reply, Dashboard Settings
+/// -> iPhone installs) and device matching found nothing, only on the
+/// once-per-install deferred check, and only on iOS.
 public protocol StraitPasteboard {
     /// Whether the clipboard probably holds a web URL, WITHOUT reading it:
     /// iOS shows no paste prompt for this (`UIPasteboard.detectPatterns`).

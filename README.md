@@ -6,10 +6,10 @@
 > [Platform status](https://straitlink.in/platform-status/) · [Docs](https://straitlink.in/docs/)
 
 Deferred deep linking for native iOS: the user taps your link, installs, and
-lands on the right screen. On iPhone, **device matching** is the primary method
-(on by default, no clipboard, no prompt) and **paste handoff** (the clipboard
-boost, off by default) is the secondary method for apps that opt in. Each is a
-workspace switch in Dashboard → Settings → iPhone installs. Navigating, not
+lands on the right screen. On iPhone, **you choose the method** in Dashboard →
+Settings → iPhone installs: **device matching**, **paste handoff** (the
+clipboard), both, or neither. The SDK reads your choice from Strait on the first
+launch, so changing it needs no app update. Navigating, not
 tracking: the signals route one tap and are never used to build profiles. How it works and what it uses: [How iPhone install matching works](https://straitlink.in/docs/iphone-install-matching/).
 
 Part of [Strait](https://straitlink.in). The match signature is a Swift port kept in lockstep with
@@ -145,51 +145,70 @@ strait.compareFingerprint { json in }  // engine's app-vs-browser comparison
 strait.checkDeferred { event in }      // re-run the deferred check (debugging)
 ```
 
-### Device matching (primary) and paste handoff (secondary), iOS
+### iPhone: you choose the deferred-link method
 
-By default the SDK finds the tap on first launch by **device matching**: the
-server compares the tap with the first launch using the IP address (stored only
-as a keyed hash), its network block and provider, screen size, language, time
-zone and iOS version. It is navigating, not tracking: the signals are used only
-to open the right screen in your app, one tap gives at most one match, and
+Dashboard → Settings → **iPhone installs** has two switches. You make the choice,
+and it applies at runtime: on the first launch the SDK asks Strait
+(`POST /v1/match`, whose reply carries `ios: {deviceMatching, pasteHandoff}`) and
+does what that reply says. Nothing is baked into your app build and the SDK never
+stores the choice, so a change reaches apps already in the App Store on their
+next first launch (within about 30 seconds), with no release.
+
+| Device matching | Paste handoff | What happens on the first launch |
+|---|---|---|
+| off | off | No deferred link on iPhone. The install is still counted; the app opens on its home screen. |
+| on | off | Device matching only. The clipboard is never touched. |
+| off | on | Paste handoff only. If the clipboard holds your one-time link, the SDK claims it (iOS shows "Allow Paste"). |
+| on | on | Device matching first. Only if it finds nothing does the SDK try the paste handoff. |
+
+**New workspaces start with both off** (device matching off by default since
+10 Oct 2026). Existing workspaces keep the values they had.
+
+#### Device matching
+
+The server compares the tap with the first launch using the IP address (stored
+only as a keyed hash), its network block and provider, screen size, language,
+time zone and iOS version. It is navigating, not tracking: the signals are used
+only to open the right screen in your app, one tap gives at most one match, and
 nothing is used for profiles or advertising. A tap can be matched for **1 hour**;
 the server's nightly cleanup erases its signals once that hour is a day old, so
 they are gone **within about 2 days of the tap** (at most 49 hours). Device
 matching never touches the clipboard.
 
-Apple's rules say apps may not fingerprint devices, even with permission.
-Device matching sits close to that line, so if you'd rather not take the App
-Review risk, use **Switch to paste only** in Dashboard → Settings → iPhone
-installs (device matching off, paste handoff on).
+**Apple policy note:** Apple's rules say apps may not fingerprint devices, even
+with tracking permission, and some App Review teams treat device matching as
+fingerprinting. Whether to take that risk is your decision; paste handoff alone
+avoids it. When device matching is off, Strait stores no device signals at the
+tap and erases the ones already stored for the workspace. Android installs keep
+using the Play Install Referrer either way.
 
-### Paste handoff (clipboard boost, optional, contract B19)
+#### Paste handoff (contract B19)
 
-For an **exact** match you can opt in to paste handoff:
-
-1. Dashboard → Settings → turn on **Paste handoff (fallback)**. The "Get the app" button
-   on your iPhone link page then also copies a one-time Strait link
-   (`https://<your-handle>.strait.link/h/<token>`, single use, 24 hours).
-2. In the app:
+With paste handoff on, the "Get the app" button on your iPhone link page also
+copies a one-time Strait link (`https://<your-handle>.strait.link/h/<token>`,
+single use, 24 hours). No app code is needed beyond the usual setup:
 
 ```swift
 let strait = StraitLinks(StraitLinksConfig(
     publishableKey: "st_pub_live_…",
-    endpoint: "https://<your-handle>.strait.link",
-    clipboardBoost: true
+    endpoint: "https://<your-handle>.strait.link"
 ))
 ```
 
-On the first launch only, the SDK runs device matching first (`POST /v1/match`).
-If that finds the install, the clipboard is never touched and no prompt shows.
-Only if it finds no match (or the request fails), the SDK asks iOS whether the
-clipboard probably holds a web link (`UIPasteboard.detectPatterns`, **no
-prompt**). Only if it does, it reads the clipboard, and **iOS shows its "Allow
-Paste" prompt** at that moment. If the person allows it and the text is a Strait
-handoff link for your link hosts, the SDK claims it (`POST /v1/handoff/claim`)
-and you get the exact destination (`route: .clipboard`). Anything else (no link,
-another site's link, a used or expired token, "Don't Allow") keeps the device
-match result. Both attempts share one `openId`, so one install is one event. Only the
-token is ever sent, never other clipboard text.
+On the first launch only, when Strait's reply says paste handoff is on and device
+matching found nothing (or is off), the SDK asks iOS whether the clipboard
+probably holds a web link (`UIPasteboard.detectPatterns`, **no prompt**). Only if
+it does, it reads the clipboard, and **iOS shows its "Allow Paste" prompt** at
+that moment. If the person allows it and the text is a Strait handoff link for
+your link hosts, the SDK claims it (`POST /v1/handoff/claim`) and you get the
+exact destination (`route: .clipboard`). Anything else (no link, another site's
+link, a used or expired token, "Don't Allow") keeps the device match result. Both
+attempts share one `openId`, so one install is one event. Only the token is ever
+sent, never other clipboard text. If Strait can't be reached, the clipboard is
+left alone and the whole check runs again on the next launch.
+
+`clipboardBoost` in `StraitLinksConfig` is **deprecated and ignored**: the
+dashboard switch decides. Existing code that sets it still compiles.
 
 **No prompt at all:** show Apple's Paste button instead. iOS shows no prompt
 because the person's tap is the consent (iOS 16+):
@@ -211,15 +230,8 @@ PasteButton(payloadType: URL.self) { urls in
 `strait.handoffAvailable { likely in }` tells you (no prompt) whether a web link
 is on the clipboard, so you can decide whether to show the button.
 
-When `clipboardBoost` is on, the SDK still tries device matching first on the
-first launch and reads the clipboard only when that finds nothing. The Paste
-button is unaffected: it claims whatever the person pastes, whenever they tap it.
-
-**Turning device matching off:** Dashboard → Settings → **Device matching
-(primary)**. When it is off, Strait stores no device signals at the tap, erases
-the ones already stored for the workspace, and iPhone installs are only matched
-through paste handoff (if on). Android installs keep
-using the Play Install Referrer.
+The Paste button works whatever the switches say: it claims whatever the person
+pastes, whenever they tap it.
 
 ### Store sheet (beta; iPhone is beta)
 
@@ -245,9 +257,9 @@ What it does:
 2. Unless the workspace turned iPhone install matching off, it saves this
    device's match fields for that tap (`POST /v1/match-save`). The installed
    app's normal deferred check finds it. iPhone matching is beta.
-3. With `copyHandoffLink: true` and the workspace's clipboard boost on, it also
-   copies the one-time handoff link; an installed app with `clipboardBoost: true`
-   claims it for an exact match. Off by default, because it replaces what the
+3. With `copyHandoffLink: true` and the workspace's paste handoff on, it also
+   copies the one-time handoff link; the installed app claims it for an exact
+   match. Off by default, because it replaces what the
    user had copied.
 4. It shows `SKStoreProductViewController` (the full product page as a sheet)
    or `SKOverlay`. Pass `providerToken` / `customProductPageId` if you use them.
@@ -287,7 +299,7 @@ A `LinkStart` with the same `id` fires first, before any network call.
 | B16 every attributed open supplies the tap id (`/v1/resolve` and `/v1/match` reply `clickId`, `replyClickId`) | ✓ |
 | B17 `screenWidth` is the portrait width: `portraitScreenWidth(bounds.width, bounds.height)` in any orientation | ✓ |
 | B18 reported/queued URLs stripped to host + path (+ `utm_source`) via `reportUrl`; expired remembered taps deleted (`staleTap`) | ✓ |
-| B19 clipboard boost: opt-in `clipboardBoost` (default off), `detectPatterns` first (no prompt), read only when a URL is likely, `parseHandoffUrl`, `POST /v1/handoff/claim`, fallback to `/v1/match`; `claimHandoff(text:)` + `StraitPasteButton` | ✓ (B1–B6, B8–B19) |
+| B19 paste handoff: chosen in the dashboard and read from the `/v1/match` reply (`ios.pasteHandoff`) at runtime; `clipboardBoost` deprecated, `detectPatterns` first (no prompt), read only when a URL is likely, `parseHandoffUrl`, `POST /v1/handoff/claim`, fallback to `/v1/match`; `claimHandoff(text:)` + `StraitPasteButton` | ✓ (B1–B6, B8–B19) |
 
 Both `test-vectors.json` (signature) and `conformance-vectors.json` (pure
 helpers) run under `swift test` in CI.

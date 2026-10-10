@@ -141,14 +141,19 @@ public struct StraitLinksConfig {
     /// `start` observes UIApplication notifications for app-state labelling
     /// (UIKit platforms only). Turn off to feed `onAppState` yourself.
     public var observeLifecycle: Bool
-    /// Clipboard boost (contract B19), iOS only. Default false: the SDK never
-    /// touches the clipboard. When true, the once-per-install deferred check
-    /// runs device matching first (primary); only if that finds no match (or
-    /// fails) does it ask iOS (no prompt) whether a web URL is on the clipboard
-    /// and only then read it, which shows iOS's "Allow Paste" prompt. A Strait
-    /// handoff link copied by your link page gives an exact match; anything
-    /// else keeps the device match result. Turn on "Clipboard boost" in Dashboard Settings too.
-    public var clipboardBoost: Bool
+    /// Deprecated and ignored. The paste handoff (contract B19) is chosen by the
+    /// customer in Dashboard Settings -> iPhone installs and read live from the
+    /// engine on the once-per-install deferred check (the `/v1/match` reply's
+    /// `ios.pasteHandoff`), so turning it on or off needs no app release. When it
+    /// is on and device matching finds nothing (or is off), the SDK asks iOS (no
+    /// prompt) whether a web URL is on the clipboard and only then reads it, which
+    /// shows iOS's "Allow Paste" prompt. Kept so existing code still compiles.
+    @available(*, deprecated, message: "Ignored: the paste handoff is switched on or off in Dashboard Settings -> iPhone installs and read from the engine at runtime.")
+    public var clipboardBoost: Bool {
+        get { legacyClipboardBoost }
+        set { legacyClipboardBoost = newValue }
+    }
+    private var legacyClipboardBoost: Bool
     /// The clipboard (tests swap it). Default `UIPasteboard.general`.
     public var pasteboard: StraitPasteboard
 
@@ -176,7 +181,7 @@ public struct StraitLinksConfig {
         self.platform = platform
         self.callbackQueue = callbackQueue
         self.observeLifecycle = observeLifecycle
-        self.clipboardBoost = clipboardBoost
+        self.legacyClipboardBoost = clipboardBoost
         self.pasteboard = pasteboard
     }
 }
@@ -591,12 +596,15 @@ public final class StraitLinks {
         let t0 = config.now()
         let id = newOpenId(t0)
         announce(LinkStart(id: id, kind: .deferred, appState: .closed, rawUrl: nil, at: t0))
-        // B19: only the once-per-install check, only on iOS, only when the app opted in.
-        let boost = record && config.clipboardBoost && config.platform == "ios"
-        // Device matching first (primary). The clipboard is read only when it
-        // finds nothing, so a device match never triggers iOS's paste prompt.
-        signalMatch(record: record, id: id, t0: t0) { [self] matchEvent in
-            guard boost && !matchEvent.matched else { return completion(emit(matchEvent)) }
+        // B19: only the once-per-install check, only on iOS, and only when the
+        // workspace turned the paste handoff on. That choice comes from the
+        // engine's /v1/match reply on this launch; nothing is kept for later.
+        let mayPaste = record && config.platform == "ios"
+        // Device matching first (when the workspace has it on). The clipboard is
+        // read only when it finds nothing, so a device match never triggers
+        // iOS's paste prompt.
+        signalMatch(record: record, id: id, t0: t0) { [self] matchEvent, pasteHandoff in
+            guard mayPaste && pasteHandoff && !matchEvent.matched else { return completion(emit(matchEvent)) }
             clipboardToken { [self] token in
                 guard let token = token else { return completion(emit(matchEvent)) }
                 // Same openId as the match, so the install is counted once.
@@ -619,7 +627,9 @@ public final class StraitLinks {
 
     /// The signal match (B8): POST /v1/match with the device fields. The event
     /// is NOT emitted here; `runDeferred` emits it (or the clipboard result).
-    private func signalMatch(record: Bool, id: String, t0: Double, completion: @escaping (LinkEvent) -> Void) {
+    /// The second value is the workspace's live paste-handoff choice from this
+    /// reply (B19); false when there was no usable answer.
+    private func signalMatch(record: Bool, id: String, t0: Double, completion: @escaping (LinkEvent, Bool) -> Void) {
         var body = config.device().json
         body["publishableKey"] = config.publishableKey
         body["platform"] = config.platform
@@ -630,7 +640,9 @@ public final class StraitLinks {
         call("POST", "/v1/match", body) { [self] r in
             // No answer, 429 or 5xx = try again next launch (reported as 'network').
             var matched = false, reason: String? = "network", dest = Destination.none, linkId: String?, referralCode: String?
+            var pasteHandoff = false
             if case let .success(res) = r, !shouldRetryReport(res.status) {
+                pasteHandoff = replyPasteHandoff(res.json)
                 matched = (res.json["matched"] as? Bool) == true
                 reason = matched ? nil : "no_match"
                 dest = matched ? destination(res.json["longUrl"] as? String) : .none
@@ -642,7 +654,7 @@ public final class StraitLinks {
                 id: id, kind: .deferred, route: .fingerprint, appState: .closed, matched: matched, reason: reason,
                 rawUrl: nil, url: dest.url, path: dest.path, params: dest.params, linkId: linkId,
                 ms: config.now() - t0, at: t0, referralCode: referralCode
-            ))
+            ), pasteHandoff)
         }
     }
 

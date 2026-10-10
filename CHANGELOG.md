@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- iPhone deferred-link method chosen by the customer at runtime (founder decision 10 Oct 2026):
+  the once-per-install check reads the workspace's choice from the `/v1/match` reply
+  (`ios.pasteHandoff`, Dashboard → Settings → iPhone installs) and reads the clipboard only
+  when it is on and device matching found nothing (or is off). Nothing is baked into the app
+  build and the choice is never stored, so changing it needs no app release. A reply without
+  the field (older engine) means off. When `/v1/match` gets no answer, 429 or 5xx, the
+  clipboard is left alone and the check runs again next launch. `StraitLinksConfig.clipboardBoost`
+  is deprecated and ignored. New public function `replyPasteHandoff(_:)`.
 - Clipboard boost order (B19): the first-launch deferred check now runs device matching
   (`/v1/match`) first; the clipboard is read and the handoff claimed only when that returns
   no match or fails. A device match no longer shows iOS's "Allow Paste" prompt. Both attempts

@@ -8,14 +8,15 @@
     * Coarse location: the server sees the request IP. It keeps only a keyed hash
       (HMAC) of the IP address and of its IPv6 /64, plus the /24 (IPv4) or /48
       (IPv6) network prefix, for the 1-hour match of a tap to the first app open
-      (deferred deep links); they are erased a day later. Workspaces can turn
-      iPhone install matching off.
+      (deferred deep links); they are erased a day later. Each workspace chooses
+      whether to use iPhone device matching (off for new workspaces).
     * Other data: screen size, preferred language, time zone and iOS version, sent
       once on first launch for the same short-lived match.
     * Product interaction: link opens reported to the app owner's Strait workspace.
-  - Clipboard boost (opt-in, off by default): only when the app sets
-    clipboardBoost, the SDK checks the clipboard on first launch and sends only a
-    Strait handoff token found there, never other clipboard text.
+  - Paste handoff (off by default): only when the app owner turns it on in
+    their Strait dashboard (read from Strait's server on first launch), the SDK
+    checks the clipboard on first launch and sends only a Strait handoff token
+    found there, never other clipboard text.
   - Required-reason API: UserDefaults stores the SDK's own state (CA92.1): the
     once-per-install flag, the last tap id, and open reports waiting to be
     re-sent (at most 7 days / 100).
