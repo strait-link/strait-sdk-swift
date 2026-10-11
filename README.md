@@ -99,7 +99,7 @@ func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIS
     // The link that launched the app from closed (Universal Link or custom scheme).
     let launchURL = options.userActivities.first(where: { $0.activityType == NSUserActivityTypeBrowsingWeb })?.webpageURL
         ?? options.urlContexts.first?.url
-    strait.start(initialURL: launchURL)       // also runs the deferred check, once per install
+    strait.start(initialURL: launchURL)       // with no launch URL, also runs the deferred check (once per install)
 }
 
 func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
@@ -239,7 +239,8 @@ let strait = StraitLinks(StraitLinksConfig(
 
 On the first launch only, when Strait's reply says paste handoff is on and device
 matching found nothing (or is off), the SDK asks iOS whether the clipboard
-probably holds a web link (`UIPasteboard.detectPatterns`, **no prompt**). Only if
+probably holds a web link (`UIPasteboard.detectPatterns`, iOS 15+, **no prompt**;
+on older iOS the clipboard is never read). Only if
 it does, it reads the clipboard, and **iOS shows its "Allow Paste" prompt** at
 that moment. If the person allows it and the text is a Strait handoff link for
 your link hosts, the SDK claims it (`POST /v1/handoff/claim`) and you get the
@@ -413,7 +414,7 @@ a real iPhone**.
 
 `id` · `kind` (`direct` / `deferred`) · `route` (`app_link`, `custom_scheme`,
 `fingerprint`, `clipboard`) · `appState` (`closed`, `background`, `foreground`) · `matched` ·
-`reason` (`not_found`, `expired`, `password_protected`, `no_match`, `network`,
+`reason` (`not_found`, `expired`, `not_live`, `password_protected`, `no_match`, `network`,
 `invalid_url`, `not_handoff`, `handoff_unknown`, `handoff_used`, `handoff_expired`) · `rawUrl` · `url` · `path` · `params` · `linkId` · `ms` · `at` · `referralCode` (deferred links only: the referral code the tap carried, when the engine sends one; referrals are a preview and not switched on yet, contract B21; grant rewards from your server via the `referral.converted` webhook).
 `id` is the open id Strait records the open under (`o_<base36 ms>_<12 chars>`).
 A `LinkStart` with the same `id` fires first, before any network call.
@@ -423,7 +424,7 @@ A `LinkStart` with the same `id` fires first, before any network call.
 | # | Status |
 |---|---|
 | B1 publishableKey in every body | ✓ (`/v1/match`, `/v1/resolve`, `/v1/open`, `/v1/event`, `/v1/debug/fingerprint`; GET compare sends it as a query param) |
-| B2 `screenWidth = browserScreenWidth(UIScreen.main.bounds.width)` | ✓ |
+| B2 `screenWidth` rounded like Safari's `screen.width` (`browserScreenWidth`, applied by `portraitScreenWidth`, see B17) | ✓ |
 | B3 short links on link hosts → `POST /v1/resolve {publishableKey,url,platform:'ios'}` | ✓ (hosts via `normalizeLinkHosts`) |
 | B4 custom scheme / https classification (`classifyUrl`), `strait_click` removed (`takeClickId`) | ✓ |
 | B5 app-state labels (`AppStateTracker`, 2000/1000 ms) | ✓ |
