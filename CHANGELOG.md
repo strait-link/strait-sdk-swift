@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.1
 
 - Real-device readiness (beta): `Examples/StraitReference`, a signable reference app
   (xcodegen) with Universal Links (`applinks:<host>`, UIKit scenes so a cold start is
