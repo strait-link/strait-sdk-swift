@@ -7,10 +7,10 @@ Swift Package for iPhone and iPad apps. iPhone install matching (deferred deep l
 
 ## Install
 
-Swift Package Manager: `https://github.com/bazingga08/strait-sdk-swift`, version 0.8.0 or later.
+Swift Package Manager: `https://github.com/bazingga08/strait-sdk-swift`, version 0.8.2 or later.
 
 ```swift
-.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.8.0")
+.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.8.2")
 // target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
 

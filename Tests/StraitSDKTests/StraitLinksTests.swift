@@ -338,6 +338,7 @@ final class DeferredLinkTests: XCTestCase {
         XCTAssertEqual(body["pixelRatio"] as? Double, 2.625)
         XCTAssertEqual(body["language"] as? String, "en")
         XCTAssertEqual(body["timezone"] as? String, "Asia/Kolkata")
+        XCTAssertNil(body["record"], "the first-launch check is the real one")
         XCTAssertEqual(h.storage.getItem("strait.deferredChecked"), "1")
     }
 
@@ -390,6 +391,17 @@ final class DeferredLinkTests: XCTestCase {
         h.strait.checkDeferred { got = $0 }
         XCTAssertEqual(got?.matched, true)
         XCTAssertEqual(got, h.events.last)
+    }
+
+    func testCheckDeferredSendsRecordFalseAndNoOpenId() throws {
+        let h = Harness(FakeEngine(matchHit))
+        h.storage.setItem("strait.deferredChecked", "1")
+        h.start()
+        h.strait.checkDeferred()
+        let body = try XCTUnwrap(h.engine.calls(to: "/v1/match").first?.body)
+        XCTAssertEqual(body["record"] as? Bool, false, "the engine adds no install for a read-only check")
+        XCTAssertNil(body["openId"])
+        XCTAssertNil(body["at"])
     }
 }
 

@@ -598,7 +598,7 @@ public final class StraitLinks {
 
     /// The deferred check. `record` (the once-per-install run) sends the openId so
     /// the engine records this first open + install exactly once; the debug
-    /// re-check doesn't, so it never adds installs.
+    /// re-check sends record:false instead, so the engine adds no install.
     private func runDeferred(record: Bool, completion: @escaping (LinkEvent) -> Void) {
         let t0 = config.now()
         let id = newOpenId(t0)
@@ -643,6 +643,8 @@ public final class StraitLinks {
         if record {
             body["openId"] = id
             body["at"] = Int64(t0) // whole ms, like the other SDKs
+        } else {
+            body["record"] = false // read only: the engine adds no install, open or webhook
         }
         call("POST", "/v1/match", body) { [self] r in
             // No answer, 429 or 5xx = try again next launch (reported as 'network').
