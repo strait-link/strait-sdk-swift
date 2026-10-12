@@ -109,7 +109,7 @@ public enum StoreSheet {
     /// Apple's campaign token, as sent to the App Store.
     public static let campaignTokenMax = 30
 
-    /// A numeric App Store id ("6474676842").
+    /// A numeric App Store id ("1234567890").
     public static func isAppStoreId(_ s: String?) -> Bool {
         guard let s = s, !s.isEmpty, s.count <= 20 else { return false }
         return s.allSatisfy { $0.isASCII && $0.isNumber }

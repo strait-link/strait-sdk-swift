@@ -33,7 +33,7 @@ cp Config/Local.xcconfig.example Config/Local.xcconfig          # STRAIT_PUBLISH
 `set-team.sh` writes `Config/Team.xcconfig`, regenerates the project, refreshes
 the block above and writes `WORKSPACE.md` with the exact Dashboard settings
 (Apple Team ID, bundle ID `<prefix>.reference`, App Clip `<prefix>.reference.Clip`)
-and the AASA the engine must then serve. It refuses the employer's team.
+and the AASA the engine must then serve. It refuses the other Apple team on this Mac (only the founder's personal team signs Strait).
 
 ## Commands
 

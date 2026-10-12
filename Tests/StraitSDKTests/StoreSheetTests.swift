@@ -22,7 +22,7 @@ final class WritablePasteboard: StraitPasteboard, StraitPasteboardWriting {
 
 private func storeSheetReply(matching: Bool = true, handoff: Any = NSNull(), campaign: Any = "autumn-sale") -> [String: Any] {
     ["ok": true, "beta": true, "clickId": CLICK, "linkId": "lnk_42",
-     "ios": ["appStoreId": "6474676842", "campaignToken": campaign, "deviceMatching": matching, "handoffUrl": handoff]]
+     "ios": ["appStoreId": "1234567890", "campaignToken": campaign, "deviceMatching": matching, "handoffUrl": handoff]]
 }
 
 private func client(_ engine: FakeEngine, pasteboard: StraitPasteboard = SystemPasteboard()) -> StraitLinks {
@@ -51,7 +51,7 @@ final class StoreSheetTests: XCTestCase {
         XCTAssertTrue(r.matchSaved)
         XCTAssertFalse(r.handoffCopied)
         XCTAssertNil(r.reason)
-        XCTAssertEqual(presenter.shown.first?.0, StoreProduct(appStoreId: "6474676842", campaignToken: "autumn-sale"))
+        XCTAssertEqual(presenter.shown.first?.0, StoreProduct(appStoreId: "1234567890", campaignToken: "autumn-sale"))
         let req = try XCTUnwrap(engine.calls(to: "/v1/store-sheet").first?.body)
         XCTAssertEqual(req["platform"] as? String, "ios")
         XCTAssertEqual(req["url"] as? String, "https://hilltop.strait.link/promo")
@@ -97,7 +97,7 @@ final class StoreSheetTests: XCTestCase {
     func testOfflineStillShowsStoreWhenIdGiven() throws {
         let engine = FakeEngine()
         engine.offline = true
-        let r = try XCTUnwrap(open(client(engine), StoreSheetOptions(appStoreId: "6474676842")))
+        let r = try XCTUnwrap(open(client(engine), StoreSheetOptions(appStoreId: "1234567890")))
         XCTAssertTrue(r.opened)
         XCTAssertNil(r.clickId)
         XCTAssertEqual(r.reason, "offline")
@@ -124,8 +124,8 @@ final class StoreSheetTests: XCTestCase {
     }
 
     func testProductHelpers() {
-        XCTAssertTrue(StoreSheet.isAppStoreId("6474676842"))
-        XCTAssertFalse(StoreSheet.isAppStoreId("id6474676842"))
+        XCTAssertTrue(StoreSheet.isAppStoreId("1234567890"))
+        XCTAssertFalse(StoreSheet.isAppStoreId("id1234567890"))
         XCTAssertFalse(StoreSheet.isAppStoreId(""))
         XCTAssertNil(StoreSheet.product(reply: ["appStoreId": NSNull()], options: StoreSheetOptions()))
         let long = String(repeating: "c", count: 50)
