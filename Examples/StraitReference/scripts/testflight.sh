@@ -16,7 +16,7 @@ destination=upload
 
 team="$(sed -n 's/^DEVELOPMENT_TEAM = //p' Config/Team.xcconfig)"
 [[ -n "$team" ]] || { echo "No team yet: run scripts/set-team.sh first." >&2; exit 2; }
-[[ "$team" != "FV443M4362" ]] || { echo "Refusing the other Apple team on this Mac: use the founder's personal team." >&2; exit 2; }
+[[ "$(printf %s "$team" | shasum -a 256 | cut -c1-16)" != "35bb5e0976b89722" ]] || { echo "Refusing the other Apple team on this Mac: use the founder's personal team." >&2; exit 2; }
 grep -q '^STRAIT_PUBLISHABLE_KEY *= *st_pub_' Config/Local.xcconfig 2>/dev/null \
   || { echo "Config/Local.xcconfig needs STRAIT_PUBLISHABLE_KEY = st_pub_… (TestFlight builds have no launch env)." >&2; exit 2; }
 

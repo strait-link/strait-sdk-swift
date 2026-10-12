@@ -16,7 +16,7 @@ fi
 team="$(printf '%s' "$team" | tr '[:lower:]' '[:upper:]')"
 [[ "$team" =~ ^[A-Z0-9]{10}$ ]] || { echo "Team ID must be 10 letters/digits (developer.apple.com -> Account -> Membership details)" >&2; exit 65; }
 [[ "$prefix" =~ ^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$ ]] || { echo "Bundle prefix must be reverse-DNS, e.g. in.straitlink" >&2; exit 65; }
-if [[ "$team" == "FV443M4362" ]]; then
+if [[ "$(printf %s "$team" | shasum -a 256 | cut -c1-16)" == "35bb5e0976b89722" ]]; then  # the other Apple team on this Mac, stored only as a hash
   echo "Refusing this team: it is the other Apple team on this Mac. Sign Strait only with the founder's personal team." >&2; exit 65
 fi
 if [[ -z "$host" ]]; then host="$(sed -n 's/^STRAIT_LINK_HOST = //p' Config/Team.xcconfig)"; fi
