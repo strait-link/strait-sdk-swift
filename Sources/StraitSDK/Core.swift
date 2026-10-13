@@ -39,10 +39,10 @@ public func portraitScreenWidth(_ logicalWidth: Double, _ logicalHeight: Double)
 }
 
 struct SplitUrl: Equatable, Decodable {
-    public let scheme: String
-    public let host: String
-    public let path: String
-    public let params: [String: String]
+    let scheme: String
+    let host: String
+    let path: String
+    let params: [String: String]
 }
 
 private let urlPattern = try! NSRegularExpression(
@@ -137,9 +137,9 @@ private func isClickId(_ v: String) -> Bool {
 
 /// A URL with its `strait_click` tap id taken out (`takeClickId`).
 struct ClickIdSplit: Equatable {
-    public let url: String
+    let url: String
     /// The tap id, lower-cased; nil when absent or malformed.
-    public let clickId: String?
+    let clickId: String?
 }
 
 /// Remove every `strait_click` parameter from a URL's query, keeping the rest
@@ -409,9 +409,9 @@ final class AppStateTracker {
     private var resumeAt = -Double.infinity
     private var backgroundFor: Double = 0
 
-    public init() {}
+    init() {}
 
-    public func onState(_ s: AppLifecycleState, now: Double) {
+    func onState(_ s: AppLifecycleState, now: Double) {
         if s != .active && state == .active { backgroundAt = now }
         if s == .active && state != .active {
             resumeAt = now
@@ -421,7 +421,7 @@ final class AppStateTracker {
     }
 
     /// Label for a link delivered (while running) at `now`.
-    public func classify(_ now: Double) -> AppStateAtLink {
+    func classify(_ now: Double) -> AppStateAtLink {
         var away: Double?
         if state != .active { away = now - backgroundAt }
         else if now - resumeAt <= RESUME_WINDOW_MS { away = backgroundFor }

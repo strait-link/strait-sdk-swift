@@ -28,6 +28,19 @@ final class DesignTokensTests: XCTestCase {
         return h < 0 ? h + 360 : h
     }
 
+    /// SDK-23: the tokens are internal. A regenerated StraitTokens.swift comes with `public`
+    /// modifiers; this fails until they are dropped again.
+    func testTokensAreNotPublicAPI() throws {
+        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../Sources/StraitSDK")
+        for file in ["StraitTokens.swift", "StraitDesign.swift"] {
+            let src = try String(contentsOf: dir.appendingPathComponent(file), encoding: .utf8)
+            let code = src.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            XCTAssertFalse(code.contains { $0.range(of: #"\b(public|open)\b"#, options: .regularExpression) != nil },
+                           "\(file) declares public API; drop the `public` modifiers (SDK-23)")
+        }
+    }
+
     func testVersionAndBrand() {
         XCTAssertTrue(StraitTokens.version.hasPrefix("5."))
         for t in [StraitTokens.light, StraitTokens.dark] {
