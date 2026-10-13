@@ -67,7 +67,7 @@ Swift Package Manager:
 Xcode: **File → Add Package Dependencies…** and paste the repo URL, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.8.2")
+.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.9.0")
 // target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
 <!-- /brand:install -->
@@ -292,14 +292,6 @@ let button = StraitPasteButton(straitLinks: strait, configuration: config)
 | Light | Dark |
 |---|---|
 | ![Paste button, light](.github/assets/paste-button-light.png) | ![Paste button, dark](.github/assets/paste-button-dark.png) |
-
-### Design tokens
-
-`StraitTokens` (generated from the Strait brand tokens v5, `Sources/StraitSDK/StraitTokens.swift`;
-never edit it by hand) carries the semantic colours for light and dark, spacing, radii, type
-sizes and durations. `StraitTokens.dynamic(\.brand)` gives a `UIColor` that follows the system
-appearance; `StraitTokens.light.brand.color` a SwiftUI `Color`. Durations are seconds: use 0 when
-`UIAccessibility.isReduceMotionEnabled`.
 
 ### Store sheet (beta; iPhone is beta)
 

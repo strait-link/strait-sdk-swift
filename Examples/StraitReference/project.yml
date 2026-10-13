@@ -32,6 +32,9 @@ targets:
     sources:
       - path: StraitReference
         excludes: ["*.entitlements"]
+      # The design tokens are internal to StraitSDK (SDK-23); the reference app compiles its own copy.
+      - path: ../../Sources/StraitSDK/StraitTokens.swift
+      - path: ../../Sources/StraitSDK/StraitDesign.swift
     dependencies:
       - package: StraitSDK
     settings:

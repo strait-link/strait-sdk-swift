@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.9.0
+
+- Smaller public API (SDK-23, decision record: shared-spec `docs/adr/0001-sdk-public-api-surface.md`).
+- The design tokens are internal: `StraitTokens`, `StraitColor`, `StraitColors` and the rest of
+  `StraitTokens.swift` (about 230 symbols), plus `StraitTokens.dynamic(_:)` and `StraitColor.uiColor`.
+  The SDK's own UI (`StraitPasteButton`) still uses them. A deep-link SDK shouldn't make its colour
+  palette a versioned promise. The README's "Design tokens" section is gone. The reference app
+  compiles its own copy of the two files.
+- The contract helpers in `Core.swift` are internal: `classifyUrl`, `splitUrl`, `SplitUrl`,
+  `normalizeLinkHosts`, `parseStraitLink`, `parseStraitClick`, `takeClickId`, `ClickIdSplit`,
+  `ClassifiedUrl`, `pageLinkLongLink`, `pruneOpenQueue`, `rememberTap`, `eventClickId`, `staleTap`,
+  `reportUrl`, `replyClickId`, `replyReferralCode`, `shouldRetryReport`, `newOpenId`,
+  `replyPasteHandoff`, `replyInstallSettings`, `parseHandoffUrl`, `browserScreenWidth`,
+  `AppStateTracker` and the queue and window constants; also `numStr` and `regionFromTimezone`. None
+  were in the docs. Still public: `StraitLinks` and its types, `Strait.resolveDeferredLink`,
+  `MatchResult`, `DeviceFields`, `InstallSettings`, `portraitScreenWidth`, `LinkRoute`,
+  `AppStateAtLink`, `AppLifecycleState`, `computeSignature`, `h32`, the store sheet, the Paste button
+  and the App Clip helpers.
+
 ## 0.8.2
 
 - `checkDeferred()` (the debug / settings re-check) now sends `"record": false` on `/v1/match`, so the

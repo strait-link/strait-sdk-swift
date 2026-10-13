@@ -51,14 +51,14 @@ public func h32(_ s: String) -> String {
 }
 
 /// Mirror JS `String(Number)`: whole numbers print with no decimal point.
-public func numStr(_ n: Double) -> String {
+func numStr(_ n: Double) -> String {
     if n == n.rounded() && abs(n) < 1e15 {
         return String(Int(n))
     }
     return String(n)
 }
 
-public func regionFromTimezone(_ timezone: String) -> String {
+func regionFromTimezone(_ timezone: String) -> String {
     let tz = timezone == "Asia/Calcutta" ? "Asia/Kolkata" : timezone
     return regionMap[tz] ?? "XX"
 }
