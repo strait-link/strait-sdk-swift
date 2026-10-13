@@ -8,7 +8,8 @@
   first launch from a link: the link was delivered, then the check's `false`, so an app that
   routes home on `!matched` left the right screen (found with the React Native SDK on an Android
   emulator, 13 Oct). The check still runs and counts the install, and is marked done (or retried
-  next launch) as before; only its no-link event is not delivered. A deferred match is still
+  next launch) as before; only its no-link event is not delivered, and it sends no
+  `onLinkStart` once a link is here (a loading state would never end). A deferred match is still
   delivered; `checkDeferred()` is unchanged (contract B6).
 
 ## 0.9.0

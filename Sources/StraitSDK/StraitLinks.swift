@@ -605,13 +605,14 @@ public final class StraitLinks {
     private func runDeferred(record: Bool, completion: @escaping (LinkEvent) -> Void) {
         let t0 = config.now()
         let id = newOpenId(t0)
-        announce(LinkStart(id: id, kind: .deferred, appState: .closed, rawUrl: nil, at: t0))
-        // B6: a link that arrived while this once-per-install check ran is what the
-        // person wants now. The check's "no link" answer (no_match or network) is
-        // returned but not delivered: it would pull the app off that link's screen.
-        let done = { [self] (e: LinkEvent) -> LinkEvent in
-            record && !e.matched && withLock({ directArrived }) ? e : emit(e)
-        }
+        // B6: a link that arrived before or while this once-per-install check ran is
+        // what the person wants now. The check's "no link" answer (no_match or
+        // network) is returned but not delivered: it would pull the app off that
+        // link's screen. Nor is a start signal sent once a link is here, since no
+        // event may follow it (a loading state would never end).
+        let quiet = { [self] in record && withLock { directArrived } }
+        if !quiet() { announce(LinkStart(id: id, kind: .deferred, appState: .closed, rawUrl: nil, at: t0)) }
+        let done = { [self] (e: LinkEvent) -> LinkEvent in quiet() && !e.matched ? e : emit(e) }
         // B19: only the once-per-install check, only on iOS, and only when the
         // workspace turned the paste handoff on. That choice comes from the
         // engine's /v1/match reply on this launch; nothing is kept for later.

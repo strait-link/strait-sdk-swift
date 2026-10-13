@@ -422,6 +422,25 @@ final class DeferredLinkTests: XCTestCase {
         XCTAssertNil(h.storage.getItem("strait.deferredChecked"), "no answer: runs again next launch")
     }
 
+    func testLinkBeforeFirstLaunchCheckLeavesNoLoadingStateOpen() {
+        // SwiftUI: onOpenURL can run before the check starts. Documented loading
+        // pattern: on at any start, off at any event.
+        let engine = FakeEngine(["/v1/match": ["matched": false]])
+        engine.modes["/v1/match"] = .hold(200)
+        let h = Harness(engine)
+        var opening = false
+        h.strait.onLinkStart { _ in opening = true }
+        h.strait.onLink { _ in opening = false }
+        h.strait.handle(urlString: "straitlink://shop.example/product/42")
+        var done = false
+        h.strait.start { done = true }
+        engine.releaseHeld()
+        XCTAssertTrue(done)
+        XCTAssertEqual(engine.calls(to: "/v1/match").count, 1, "the install is still counted")
+        XCTAssertEqual(h.events.map(\.kind), [.direct])
+        XCTAssertFalse(opening)
+    }
+
     func testNoLinkThisLaunchStillDeliversNoMatch() throws {
         let h = Harness(FakeEngine(["/v1/match": ["matched": false]]))
         h.start()
