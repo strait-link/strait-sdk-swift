@@ -221,6 +221,8 @@ public final class StraitLinks {
     private var flushWaiters: [() -> Void]?
     private var observers: [NSObjectProtocol] = []
     private var installSettings: InstallSettings?
+    /// A direct link arrived in this launch (B6: the check's "no link" then stays quiet).
+    private var directArrived = false
 
     public init(_ config: StraitLinksConfig) {
         self.config = config
@@ -535,6 +537,7 @@ public final class StraitLinks {
     }
 
     private func handleUrl(_ raw: String, appState: AppStateAtLink, firstLaunch: Bool, completion: ((LinkEvent) -> Void)?) {
+        withLock { directArrived = true }
         let t0 = config.now()
         let id = newOpenId(t0)
         let platform = config.platform
@@ -603,6 +606,12 @@ public final class StraitLinks {
         let t0 = config.now()
         let id = newOpenId(t0)
         announce(LinkStart(id: id, kind: .deferred, appState: .closed, rawUrl: nil, at: t0))
+        // B6: a link that arrived while this once-per-install check ran is what the
+        // person wants now. The check's "no link" answer (no_match or network) is
+        // returned but not delivered: it would pull the app off that link's screen.
+        let done = { [self] (e: LinkEvent) -> LinkEvent in
+            record && !e.matched && withLock({ directArrived }) ? e : emit(e)
+        }
         // B19: only the once-per-install check, only on iOS, and only when the
         // workspace turned the paste handoff on. That choice comes from the
         // engine's /v1/match reply on this launch; nothing is kept for later.
@@ -611,21 +620,21 @@ public final class StraitLinks {
         // read only when it finds nothing, so a device match never triggers
         // iOS's paste prompt.
         signalMatch(record: record, id: id, t0: t0) { [self] matchEvent, pasteHandoff in
-            guard mayPaste && pasteHandoff && !matchEvent.matched else { return completion(emit(matchEvent)) }
+            guard mayPaste && pasteHandoff && !matchEvent.matched else { return completion(done(matchEvent)) }
             clipboardToken { [self] token in
-                guard let token = token else { return completion(emit(matchEvent)) }
+                guard let token = token else { return completion(done(matchEvent)) }
                 // Same openId as the match, so the install is counted once.
                 claim(token: token, id: id, t0: t0) { [self] outcome in
                     switch outcome {
                     case let .matched(e): completion(e)
                     case .unmatched(reason: "network"):
-                        completion(emit(LinkEvent(
+                        completion(done(LinkEvent(
                             id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: false, reason: "network",
                             rawUrl: nil, url: nil, path: nil, params: nil, linkId: nil, ms: config.now() - t0, at: t0
                         )))
                     case .unmatched:
                         // Unknown, used or expired: report the device match result.
-                        completion(emit(matchEvent))
+                        completion(done(matchEvent))
                     }
                 }
             }

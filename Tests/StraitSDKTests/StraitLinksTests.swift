@@ -15,6 +15,8 @@ final class FakeEngine: StraitTransport {
     enum Mode {
         case offline, hang
         case status(Int)
+        /// Answers (from `routes`, with this status) only when `releaseHeld()` is called.
+        case hold(Int)
     }
     struct Call {
         let method: String
@@ -26,6 +28,7 @@ final class FakeEngine: StraitTransport {
     var offline = false
     var modes: [String: Mode] = [:]
     var calls: [Call] = []
+    private var held: [() -> Void] = []
 
     init(_ routes: [String: [String: Any]] = [:]) { self.routes = routes }
 
@@ -37,6 +40,10 @@ final class FakeEngine: StraitTransport {
         switch modes[url.path] {
         case .offline?: return completion(.failure(URLError(.notConnectedToInternet)))
         case .hang?: return
+        case let .hold(code)?:
+            let payload = routes[url.path] ?? [:]
+            held.append { completion(.success(StraitHTTPResponse(status: code, data: try! JSONSerialization.data(withJSONObject: payload)))) }
+            return
         case let .status(code)?:
             let payload = routes[url.path] ?? [:]
             return completion(.success(StraitHTTPResponse(status: code, data: try! JSONSerialization.data(withJSONObject: payload))))
@@ -49,6 +56,12 @@ final class FakeEngine: StraitTransport {
     }
 
     func calls(to path: String) -> [Call] { calls.filter { $0.path == path } }
+
+    func releaseHeld() {
+        let pending = held
+        held = []
+        pending.forEach { $0() }
+    }
 }
 
 final class FakeClock {
@@ -369,6 +382,52 @@ final class DeferredLinkTests: XCTestCase {
         XCTAssertEqual(h.events.map(\.kind), [.direct])
         XCTAssertTrue(h.engine.calls(to: "/v1/match").isEmpty)
         XCTAssertEqual(h.storage.getItem("strait.deferredChecked"), "1")
+    }
+
+    // Found with the React Native SDK on an Android emulator (13 Oct): the
+    // first-launch check's /v1/match was still waiting when a tapped link
+    // arrived; the link was delivered, then the check's "no link", and an app
+    // that routes home on !matched left the right screen (B6). On iPhone the
+    // documented SwiftUI setup (`start()` + `onOpenURL`) hits it on every first
+    // launch from a link.
+    func testLinkDuringFirstLaunchCheckIsNotFollowedByNoMatch() {
+        let engine = FakeEngine(["/v1/match": ["matched": false, "matchMethod": "none"]])
+        engine.modes["/v1/match"] = .hold(200)
+        let h = Harness(engine)
+        var done = false
+        h.strait.start { done = true }
+        XCTAssertEqual(engine.calls(to: "/v1/match").count, 1)
+        h.strait.handle(urlString: "straitlink://shop.example/product/42")
+        XCTAssertEqual(h.events.map(\.kind), [.direct])
+        engine.releaseHeld()
+        XCTAssertTrue(done)
+        XCTAssertEqual(h.events.map(\.kind), [.direct])
+        XCTAssertEqual(h.events.first?.path, "/product/42")
+        XCTAssertEqual(h.storage.getItem("strait.deferredChecked"), "1", "the engine answered: the check is done")
+        var late: [LinkEvent] = []
+        h.strait.onLink { late.append($0) }
+        XCTAssertEqual(late.map(\.kind), [.direct])
+    }
+
+    func testLinkDuringFirstLaunchCheckNetworkFailureIsQuietAndRetried() {
+        let engine = FakeEngine()
+        engine.modes["/v1/match"] = .hold(503)
+        let h = Harness(engine)
+        var done = false
+        h.strait.start { done = true }
+        h.strait.handle(urlString: "straitlink://shop.example/product/42")
+        engine.releaseHeld()
+        XCTAssertTrue(done)
+        XCTAssertEqual(h.events.map(\.kind), [.direct])
+        XCTAssertNil(h.storage.getItem("strait.deferredChecked"), "no answer: runs again next launch")
+    }
+
+    func testNoLinkThisLaunchStillDeliversNoMatch() throws {
+        let h = Harness(FakeEngine(["/v1/match": ["matched": false]]))
+        h.start()
+        h.strait.handle(urlString: "straitlink://shop.example/product/42")
+        XCTAssertEqual(h.events.map(\.kind), [.deferred, .direct])
+        XCTAssertEqual(h.events.first?.reason, "no_match")
     }
 
     func testNetworkFailure() throws {

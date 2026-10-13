@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.1
+
+- Fix: a link that opens the app while the first-launch deferred check is still running is no
+  longer followed by that check's "no link" event (`matched: false`, `no_match` or `network`).
+  The documented SwiftUI setup (`start()` in `init`, links from `onOpenURL`) hit this on every
+  first launch from a link: the link was delivered, then the check's `false`, so an app that
+  routes home on `!matched` left the right screen (found with the React Native SDK on an Android
+  emulator, 13 Oct). The check still runs and counts the install, and is marked done (or retried
+  next launch) as before; only its no-link event is not delivered. A deferred match is still
+  delivered; `checkDeferred()` is unchanged (contract B6).
+
 ## 0.9.0
 
 - Smaller public API (SDK-23, decision record: shared-spec `docs/adr/0001-sdk-public-api-surface.md`).
