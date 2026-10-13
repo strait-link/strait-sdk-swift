@@ -441,6 +441,37 @@ final class DeferredLinkTests: XCTestCase {
         XCTAssertFalse(opening)
     }
 
+    // 13 Oct follow-up: a late deferred *match* would jump from the screen the
+    // person just tapped to a stale pre-install destination.
+    func testLinkDuringFirstLaunchCheckIsNotFollowedByLateMatch() throws {
+        let engine = FakeEngine(matchHit)
+        engine.modes["/v1/match"] = .hold(200)
+        let h = Harness(engine)
+        var opening = false
+        h.strait.onLinkStart { _ in opening = true }
+        h.strait.onLink { _ in opening = false }
+        var done = false
+        h.strait.start { done = true }
+        h.strait.handle(urlString: "straitlink://shop.example/product/42")
+        engine.releaseHeld()
+        XCTAssertTrue(done)
+        XCTAssertEqual(h.events.map(\.kind), [.direct])
+        XCTAssertEqual(h.events.first?.path, "/product/42")
+        XCTAssertFalse(opening)
+        let match = try XCTUnwrap(engine.calls(to: "/v1/match").first?.body)
+        XCTAssertNotNil(match["openId"] as? String, "the engine counts and attributes the install as before")
+        XCTAssertNil(match["record"])
+        XCTAssertEqual(h.storage.getItem("strait.deferredChecked"), "1")
+        var late: [LinkEvent] = []
+        h.strait.onLink { late.append($0) }
+        XCTAssertEqual(late.map(\.kind), [.direct], "not replayed")
+        engine.modes["/v1/match"] = nil
+        var again: LinkEvent?
+        h.strait.checkDeferred { again = $0 }
+        XCTAssertEqual(again?.matched, true, "an explicit checkDeferred() still answers")
+        XCTAssertEqual(again?.path, "/promo/DIWALI20")
+    }
+
     func testNoLinkThisLaunchStillDeliversNoMatch() throws {
         let h = Harness(FakeEngine(["/v1/match": ["matched": false]]))
         h.start()
@@ -1025,6 +1056,8 @@ final class PrivacyTests: XCTestCase {
 final class SpyPasteboard: StraitPasteboard {
     var probableURL: Bool
     var text: String?
+    /// Runs inside the detect, before it answers (a link arriving meanwhile).
+    var duringDetect: (() -> Void)?
     private(set) var detectCalls = 0
     private(set) var readCalls = 0
     init(probableURL: Bool = true, text: String? = nil) {
@@ -1033,6 +1066,7 @@ final class SpyPasteboard: StraitPasteboard {
     }
     func hasProbableWebURL(completion: @escaping (Bool) -> Void) {
         detectCalls += 1
+        duringDetect?()
         completion(probableURL)
     }
     func readString() -> String? {
@@ -1057,6 +1091,52 @@ private let noMatchPaste: [String: Any] = ["matched": false, "matchMethod": "non
 private let noMatchDeviceOnly: [String: Any] = ["matched": false, "matchMethod": "none", "ios": ["deviceMatching": true, "pasteHandoff": false]]
 
 final class ClipboardBoostTests: XCTestCase {
+    // B6 + B19 (13 Oct follow-up): once a link has opened the app in this launch,
+    // the first-launch check's answer won't be delivered, so reading the
+    // clipboard would show iOS's paste prompt for nothing.
+    func testLinkBeforeTheClipboardStepSkipsTheClipboard() throws {
+        let spy = SpyPasteboard(probableURL: true, text: HANDOFF)
+        let engine = FakeEngine(["/v1/match": noMatchPaste, "/v1/handoff/claim": claimed])
+        engine.modes["/v1/match"] = .hold(200)
+        let h = Harness(engine, pasteboard: spy)
+        var done = false
+        h.strait.start { done = true }
+        h.strait.handle(urlString: "straitlink://shop.example/product/42")
+        engine.releaseHeld()
+        XCTAssertTrue(done)
+        XCTAssertEqual(spy.touched, 0, "no detect, no read, no paste prompt")
+        XCTAssertTrue(engine.calls(to: "/v1/handoff/claim").isEmpty)
+        XCTAssertEqual(h.events.map(\.kind), [.direct])
+        XCTAssertEqual(h.storage.getItem("strait.deferredChecked"), "1")
+    }
+
+    func testLinkDuringTheDetectSkipsTheRead() throws {
+        let spy = SpyPasteboard(probableURL: true, text: HANDOFF)
+        let h = Harness(FakeEngine(["/v1/match": noMatchPaste, "/v1/handoff/claim": claimed]), pasteboard: spy)
+        spy.duringDetect = { h.strait.handle(urlString: "straitlink://shop.example/product/42") }
+        h.start()
+        XCTAssertEqual(spy.detectCalls, 1)
+        XCTAssertEqual(spy.readCalls, 0, "the link arrived before the read: no paste prompt")
+        XCTAssertTrue(h.engine.calls(to: "/v1/handoff/claim").isEmpty)
+        XCTAssertEqual(h.events.map(\.kind), [.direct])
+    }
+
+    func testLinkAfterTheReadClaimsAsBeforeButDeliversNothing() throws {
+        let spy = SpyPasteboard(probableURL: true, text: HANDOFF)
+        let engine = FakeEngine(["/v1/match": noMatchPaste, "/v1/handoff/claim": claimed])
+        engine.modes["/v1/handoff/claim"] = .hold(200)
+        let h = Harness(engine, pasteboard: spy)
+        var done = false
+        h.strait.start { done = true }
+        XCTAssertEqual(spy.readCalls, 1)
+        h.strait.handle(urlString: "straitlink://shop.example/product/42")
+        engine.releaseHeld()
+        XCTAssertTrue(done)
+        XCTAssertEqual(engine.calls(to: "/v1/handoff/claim").count, 1, "already read: the claim goes ahead")
+        XCTAssertEqual(h.events.map(\.kind), [.direct], "its match is not delivered")
+        XCTAssertEqual(h.storage.getItem("strait.deferredChecked"), "1")
+    }
+
     func testPasteHandoffOffInTheReplyNeverTouchesTheClipboard() throws {
         let spy = SpyPasteboard(probableURL: true, text: HANDOFF)
         let h = Harness(FakeEngine(["/v1/match": noMatchDeviceOnly, "/v1/handoff/claim": claimed]), pasteboard: spy)

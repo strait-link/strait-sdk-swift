@@ -221,7 +221,7 @@ public final class StraitLinks {
     private var flushWaiters: [() -> Void]?
     private var observers: [NSObjectProtocol] = []
     private var installSettings: InstallSettings?
-    /// A direct link arrived in this launch (B6: the check's "no link" then stays quiet).
+    /// A direct link arrived in this launch (B6: the first-launch check then stays quiet).
     private var directArrived = false
 
     public init(_ config: StraitLinksConfig) {
@@ -444,7 +444,7 @@ public final class StraitLinks {
         claim(token: token, id: id, t0: t0) { [self] outcome in
             let e: LinkEvent
             switch outcome {
-            case let .matched(event): e = event
+            case let .matched(event): e = emit(event)
             case let .unmatched(reason):
                 e = emit(LinkEvent(
                     id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: false, reason: reason,
@@ -474,6 +474,7 @@ public final class StraitLinks {
     }
 
     /// POST /v1/handoff/claim. `.unmatched("network")` = no answer, 429 or 5xx.
+    /// The matched event is not emitted here; the caller emits it.
     private func claim(token: String, id: String, t0: Double, completion: @escaping (ClaimOutcome) -> Void) {
         let body: [String: Any] = [
             "publishableKey": config.publishableKey, "token": token, "platform": "ios", "openId": id, "at": Int64(t0),
@@ -487,19 +488,20 @@ public final class StraitLinks {
             }
             noteTap(replyClickId(res.json["clickId"]), at: t0)
             let dest = destination(res.json["longUrl"] as? String)
-            completion(.matched(emit(LinkEvent(
+            completion(.matched(LinkEvent(
                 id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: true, reason: nil,
                 rawUrl: nil, url: dest.url, path: dest.path, params: dest.params, linkId: res.json["linkId"] as? String,
                 ms: config.now() - t0, at: t0, referralCode: replyReferralCode(res.json["referralCode"])
-            ))))
+            )))
         }
     }
 
     /// B19 steps 1–3 on the once-per-install check: detect (no prompt), read only
-    /// when a URL is likely (prompt), parse. nil = no handoff token.
-    private func clipboardToken(completion: @escaping (String?) -> Void) {
+    /// when a URL is likely (prompt), parse. nil = no handoff token. `skip()`
+    /// true after the detect (a link arrived meanwhile) = no read, no prompt.
+    private func clipboardToken(skip: @escaping () -> Bool, completion: @escaping (String?) -> Void) {
         config.pasteboard.hasProbableWebURL { [self] likely in
-            guard likely else { return completion(nil) }
+            guard likely && !skip() else { return completion(nil) }
             completion(parseHandoffUrl(config.pasteboard.readString(), linkHosts: linkHosts))
         }
     }
@@ -606,28 +608,30 @@ public final class StraitLinks {
         let t0 = config.now()
         let id = newOpenId(t0)
         // B6: a link that arrived before or while this once-per-install check ran is
-        // what the person wants now. The check's "no link" answer (no_match or
+        // what the person wants now. The check's answer (a match, no_match or
         // network) is returned but not delivered: it would pull the app off that
-        // link's screen. Nor is a start signal sent once a link is here, since no
-        // event may follow it (a loading state would never end).
+        // link's screen to a stale pre-install destination. The engine has still
+        // counted (and attributed) the install. Nor is a start signal sent once a
+        // link is here, since no event may follow it (a loading state would never end).
         let quiet = { [self] in record && withLock { directArrived } }
         if !quiet() { announce(LinkStart(id: id, kind: .deferred, appState: .closed, rawUrl: nil, at: t0)) }
-        let done = { [self] (e: LinkEvent) -> LinkEvent in quiet() && !e.matched ? e : emit(e) }
+        let done = { [self] (e: LinkEvent) -> LinkEvent in quiet() ? e : emit(e) }
         // B19: only the once-per-install check, only on iOS, and only when the
         // workspace turned the paste handoff on. That choice comes from the
         // engine's /v1/match reply on this launch; nothing is kept for later.
         let mayPaste = record && config.platform == "ios"
         // Device matching first (when the workspace has it on). The clipboard is
         // read only when it finds nothing, so a device match never triggers
-        // iOS's paste prompt.
+        // iOS's paste prompt. Nor is it read once a link is here: the result
+        // won't be delivered, so the prompt would be for nothing.
         signalMatch(record: record, id: id, t0: t0) { [self] matchEvent, pasteHandoff in
-            guard mayPaste && pasteHandoff && !matchEvent.matched else { return completion(done(matchEvent)) }
-            clipboardToken { [self] token in
+            guard mayPaste && pasteHandoff && !matchEvent.matched && !quiet() else { return completion(done(matchEvent)) }
+            clipboardToken(skip: quiet) { [self] token in
                 guard let token = token else { return completion(done(matchEvent)) }
                 // Same openId as the match, so the install is counted once.
                 claim(token: token, id: id, t0: t0) { [self] outcome in
                     switch outcome {
-                    case let .matched(e): completion(e)
+                    case let .matched(e): completion(done(e))
                     case .unmatched(reason: "network"):
                         completion(done(LinkEvent(
                             id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: false, reason: "network",
