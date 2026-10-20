@@ -11,6 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: swift test
+      - run: node scripts/spec-vectors.mjs
       # Compile for iOS too: UIKit code (clipboard boost, StraitPasteButton) is skipped on macOS.
       - run: xcodebuild -scheme StraitSDK -destination 'generic/platform=iOS' -skipPackagePluginValidation build CODE_SIGNING_ALLOWED=NO
       - run: node scripts/brand.mjs
