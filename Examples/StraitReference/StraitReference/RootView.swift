@@ -92,7 +92,7 @@ struct StoreSheetView: View {
                 }
             }
             .straitScreen()
-            .navigationTitle("Store sheet (beta)")
+            .navigationTitle("Store sheet")
         }
         .navigationViewStyle(.stack)
     }

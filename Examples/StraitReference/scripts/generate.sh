@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# project.yml -> StraitReference.xcodeproj (xcodegen). STRAIT_APP_CLIP=1 adds the App Clip (beta).
+# project.yml -> StraitReference.xcodeproj (xcodegen). STRAIT_APP_CLIP=1 adds the App Clip (optional).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v xcodegen >/dev/null || { echo "xcodegen missing: brew install xcodegen" >&2; exit 1; }

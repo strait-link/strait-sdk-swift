@@ -1,4 +1,4 @@
-# The reference app PLUS its App Clip (beta). Use: STRAIT_APP_CLIP=1 scripts/generate.sh
+# The reference app PLUS its App Clip (optional). Use: STRAIT_APP_CLIP=1 scripts/generate.sh
 #
 # The App Clip opens from a link on the workspace host (AASA "appclips", set the
 # App Clip bundle ID in Dashboard -> Settings -> App configuration), saves the
