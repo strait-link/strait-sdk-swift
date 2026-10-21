@@ -14,10 +14,10 @@
 A tap opens the exact screen, and every link open and install is recorded in your Strait dashboard.</p>
 
 <p align="center">
-  <a href="https://github.com/bazingga08/strait-sdk-swift/tags"><img alt="Latest version" src="https://img.shields.io/github/v/tag/bazingga08/strait-sdk-swift?sort=semver&label=version&style=flat-square&labelColor=0F0D0A&color=423B33"></a>
+  <a href="https://github.com/strait-link/strait-sdk-swift/tags"><img alt="Latest version" src="https://img.shields.io/github/v/tag/strait-link/strait-sdk-swift?sort=semver&label=version&style=flat-square&labelColor=0F0D0A&color=423B33"></a>
   <a href="https://straitlink.in/platform-status/"><img alt="SDK: Beta" src="https://img.shields.io/badge/SDK-beta-423B33?style=flat-square&labelColor=0F0D0A"></a>
   <a href="https://straitlink.in/docs/iphone-install-matching/"><img alt="iPhone: Beta" src="https://img.shields.io/badge/iPhone-beta-423B33?style=flat-square&labelColor=0F0D0A"></a>
-  <a href="https://github.com/bazingga08/strait-sdk-swift/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/bazingga08/strait-sdk-swift/ci.yml?branch=main&label=CI&style=flat-square&labelColor=0F0D0A"></a>
+  <a href="https://github.com/strait-link/strait-sdk-swift/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/strait-link/strait-sdk-swift/ci.yml?branch=main&label=CI&style=flat-square&labelColor=0F0D0A"></a>
   <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-423B33?style=flat-square&labelColor=0F0D0A"></a>
 </p>
 
@@ -67,7 +67,7 @@ Swift Package Manager:
 Xcode: **File → Add Package Dependencies…** and paste the repo URL, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.9.2")
+.package(url: "https://github.com/strait-link/strait-sdk-swift", from: "0.9.2")
 // target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
 <!-- /brand:install -->
@@ -460,5 +460,5 @@ the **server** adds the observed IP and computes the match signature.
 
 - **Docs:** [straitlink.in/docs/sdks/ios/](https://straitlink.in/docs/sdks/ios/) · [platform status](https://straitlink.in/platform-status/) · [troubleshooting](https://straitlink.in/docs/troubleshooting/)
 - **Talk to the Strait team:** [support@straitlink.in](mailto:support@straitlink.in) (replies within 1 working day, IST) or call +91 81218 61890.
-- **Bugs and feature requests:** [open an issue](https://github.com/bazingga08/strait-sdk-swift/issues) on this repo.
+- **Bugs and feature requests:** [open an issue](https://github.com/strait-link/strait-sdk-swift/issues) on this repo.
 - **Security:** never in a public issue. Write to security@straitlink.in (see [SECURITY.md](SECURITY.md)).
