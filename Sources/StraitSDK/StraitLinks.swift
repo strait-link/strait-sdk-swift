@@ -156,6 +156,10 @@ public struct StraitLinksConfig {
     private var legacyClipboardBoost: Bool
     /// The clipboard (tests swap it). Default `UIPasteboard.general`.
     public var pasteboard: StraitPasteboard
+    /// What the app runs on, sent as `deviceClass` with the open reports that record a tap:
+    /// "tablet" on an iPad, "phone" on an iPhone, nil elsewhere. iPadOS Safari sends a Mac
+    /// user agent, so only the app can tell the engine it is an iPad (engine ADR 0038).
+    public var deviceClass: String?
 
     public init(
         publishableKey: String,
@@ -169,7 +173,8 @@ public struct StraitLinksConfig {
         callbackQueue: DispatchQueue? = .main,
         observeLifecycle: Bool = true,
         clipboardBoost: Bool = false,
-        pasteboard: StraitPasteboard = SystemPasteboard()
+        pasteboard: StraitPasteboard = SystemPasteboard(),
+        deviceClass: String? = currentDeviceClass()
     ) {
         self.publishableKey = publishableKey
         self.endpoint = endpoint
@@ -183,6 +188,7 @@ public struct StraitLinksConfig {
         self.observeLifecycle = observeLifecycle
         self.legacyClipboardBoost = clipboardBoost
         self.pasteboard = pasteboard
+        self.deviceClass = deviceClass
     }
 }
 
@@ -573,10 +579,11 @@ public final class StraitLinks {
                 openId: id, kind: .direct, route: .appLink, appState: appState, platform: platform, url: reported,
                 clickId: nil, linkId: nil, matched: false, reason: nil, firstLaunch: firstLaunch, at: t0
             )
-            let body: [String: Any] = [
+            var body: [String: Any] = [
                 "publishableKey": config.publishableKey, "url": reported, "platform": platform,
                 "openId": id, "appState": appState.rawValue, "firstLaunch": firstLaunch, "at": Int64(t0),
             ]
+            if let dc = config.deviceClass { body["deviceClass"] = dc }
             call("POST", "/v1/resolve", body) { [self] r in
                 guard case let .success(res) = r else {
                     var failed = base
@@ -735,6 +742,7 @@ public final class StraitLinks {
             return completion(400) // can't happen; never retry a report that can't be built
         }
         body["publishableKey"] = config.publishableKey
+        if let dc = config.deviceClass { body["deviceClass"] = dc }
         call("POST", "/v1/open", body) { r in
             completion(try? r.get().status)
         }
