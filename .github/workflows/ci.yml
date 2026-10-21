@@ -9,7 +9,7 @@ jobs:
   test:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: swift test
       - run: node scripts/spec-vectors.mjs
       # Compile for iOS too: UIKit code (clipboard boost, StraitPasteButton) is skipped on macOS.
