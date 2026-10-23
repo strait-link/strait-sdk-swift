@@ -158,7 +158,7 @@ public struct StraitLinksConfig {
     public var pasteboard: StraitPasteboard
     /// What the app runs on, sent as `deviceClass` with the open reports that record a tap:
     /// "tablet" on an iPad, "phone" on an iPhone, nil elsewhere. iPadOS Safari sends a Mac
-    /// user agent, so only the app can tell the engine it is an iPad (engine ADR 0038).
+    /// user agent, so only the app can tell the engine it is an iPad (engine ADR 0039).
     public var deviceClass: String?
 
     public init(

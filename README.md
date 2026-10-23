@@ -68,7 +68,7 @@ Swift Package Manager:
 Xcode: **File → Add Package Dependencies…** and paste the repo URL, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.9.2")
+.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.9.3")
 // target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
 <!-- /brand:install -->
