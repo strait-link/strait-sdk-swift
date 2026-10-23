@@ -138,7 +138,8 @@ extension StraitLinks {
     /// `completion` runs on the config's callback queue.
     public func openStoreSheet(url: String, options: StoreSheetOptions = StoreSheetOptions(),
                                presenter: StoreSheetPresenting, completion: ((StoreSheetResult) -> Void)? = nil) {
-        let body: [String: Any] = ["publishableKey": config.publishableKey, "url": url, "platform": "ios"]
+        var body: [String: Any] = ["publishableKey": config.publishableKey, "url": url, "platform": "ios"]
+        if let dc = config.deviceClass { body["deviceClass"] = dc }
         call("POST", "/v1/store-sheet", body) { [self] r in
             var reason: String?
             var ios: [String: Any]?

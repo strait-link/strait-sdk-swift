@@ -79,7 +79,7 @@ final class Harness {
     let pasteboard: SpyPasteboard
 
     init(_ engine: FakeEngine, storage: MemoryStorage = MemoryStorage(), linkHosts: [String] = [],
-         pasteboard: SpyPasteboard = SpyPasteboard(), platform: String = "ios") {
+         pasteboard: SpyPasteboard = SpyPasteboard(), platform: String = "ios", deviceClass: String? = nil) {
         self.engine = engine
         self.pasteboard = pasteboard
         self.storage = storage
@@ -88,7 +88,7 @@ final class Harness {
         strait = StraitLinks(StraitLinksConfig(
             publishableKey: PK, endpoint: ENDPOINT, linkHosts: linkHosts, storage: storage, transport: engine,
             now: { clock.t }, device: { device }, platform: platform, callbackQueue: nil, observeLifecycle: false,
-            pasteboard: pasteboard
+            pasteboard: pasteboard, deviceClass: deviceClass
         ))
         strait.onLink { [unowned self] in self.events.append($0) }
     }
@@ -1439,5 +1439,40 @@ final class DeferredMethodChoiceTests: XCTestCase {
         XCTAssertFalse(replyPasteHandoff(["ios": ["pasteHandoff": "true"]]))
         XCTAssertFalse(replyPasteHandoff(["pasteHandoff": true]))
         XCTAssertFalse(replyPasteHandoff([:]))
+    }
+}
+
+// ADR 0038 (engine): iPadOS Safari sends a Mac user agent, so only the app can say
+// "iPad". The SDK sends deviceClass with the open reports that record a tap.
+final class DeviceClassTests: XCTestCase {
+    func testMapsTheDeviceModel() {
+        XCTAssertEqual(deviceClassFor(model: "iPad", onMac: false), "tablet")
+        XCTAssertEqual(deviceClassFor(model: "iPhone", onMac: false), "phone")
+        XCTAssertEqual(deviceClassFor(model: "iPod touch", onMac: false), "phone")
+        XCTAssertNil(deviceClassFor(model: "iPad", onMac: true), "an iPad app on a Mac is not a tablet")
+        XCTAssertNil(deviceClassFor(model: "Apple Vision", onMac: false))
+    }
+
+    func testResolveAndItsOfflineRetryCarryTheDeviceClass() throws {
+        let engine = FakeEngine()
+        engine.modes = ["/v1/resolve": .offline, "/v1/open": .status(202)]
+        engine.routes["/v1/open"] = ["ok": true]
+        let h = Harness(engine, storage: returning(), deviceClass: "tablet")
+        h.start()
+        h.strait.handle(urlString: "https://links.test/sale")
+        let resolve = try XCTUnwrap(engine.calls(to: "/v1/resolve").last?.body)
+        XCTAssertEqual(resolve["deviceClass"] as? String, "tablet")
+        h.strait.flushOpenReports()
+        let open = try XCTUnwrap(engine.calls(to: "/v1/open").last?.body)
+        XCTAssertEqual(open["deviceClass"] as? String, "tablet")
+    }
+
+    func testNothingSentWhenUnknown() throws {
+        let engine = FakeEngine(["/v1/resolve": resolvedRecorded])
+        let h = Harness(engine, storage: returning())
+        h.start()
+        h.strait.handle(urlString: "https://links.test/sale")
+        let resolve = try XCTUnwrap(engine.calls(to: "/v1/resolve").last?.body)
+        XCTAssertNil(resolve["deviceClass"])
     }
 }
