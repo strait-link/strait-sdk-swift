@@ -2,7 +2,7 @@ import StoreKit
 import StraitSDK
 import SwiftUI
 
-/// The reference App Clip (beta). A link on the workspace host opens it with the
+/// The reference App Clip (optional, new). A link on the workspace host opens it with the
 /// exact URL; it shows where that link goes, saves the URL in the App Group the
 /// full app shares, and offers the full app (SKOverlay). The full app's first
 /// launch takes the URL (StraitAppClip.takeInvocation) and opens it.

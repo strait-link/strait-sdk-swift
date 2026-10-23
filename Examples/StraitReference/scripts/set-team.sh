@@ -43,7 +43,7 @@ cat > WORKSPACE.md <<MD
 |---|---|
 | Apple Team ID | \`$team\` |
 | App bundle ID | \`$app\` |
-| App Clip bundle ID (beta) | \`$clip\` |
+| App Clip bundle ID (optional) | \`$clip\` |
 | App Group | \`$group\` |
 | Link host (associated domain) | \`$host\` |
 | URL scheme | \`straitref://\` |

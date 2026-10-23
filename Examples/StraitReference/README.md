@@ -1,8 +1,9 @@
-# StraitReference: the signable iOS reference app (beta)
+# StraitReference: the signable iOS reference app
 
 A real iOS app wired to StraitSDK from this repo, ready for a physical iPhone,
-TestFlight and an optional App Clip. iPhone support stays **beta** until the
-real-device proof below has passed.
+TestFlight and an optional App Clip. The link rows of the
+real-device proof below passed on a real iPhone 16 Pro (iOS 26) on 21 Oct 2026, so iPhone
+links are live. The store sheet waits on this app's own App Store record.
 
 <!-- set-team:values -->
 Team: placeholder (not set) · app `in.straitlink.reference` · host `strait-dev.strait.link` (set with `scripts/set-team.sh`)
@@ -45,7 +46,7 @@ and the AASA the engine must then serve. It refuses the other Apple team on this
 | `scripts/device-proof.sh` | team, Xcode account, iPhone in Developer Mode | XCUITest on the phone: runtime choice, AASA, Universal Links warm/cold, store sheet, scheme, then the four dashboard combinations (it pauses for you to flip the switches) |
 | `scripts/testflight.sh` | team, Xcode account, App Store Connect app record | archive + `xcodebuild -exportArchive` upload (internal testing only) |
 
-## The App Clip (beta, behind `STRAIT_APP_CLIP=1`)
+## The App Clip (optional, new: not yet tried on a device; behind `STRAIT_APP_CLIP=1`)
 
 A link on the workspace host opens the App Clip with the exact URL. The App Clip
 saves it in the App Group `group.<prefix>.reference` (`StraitAppClip.saveInvocation`)

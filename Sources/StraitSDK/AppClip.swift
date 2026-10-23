@@ -1,6 +1,6 @@
 import Foundation
 
-// App Clip handoff (beta; the iPhone side of Strait is beta).
+// App Clip handoff (optional, new: not yet tried on a device).
 //
 // An App Clip launched from one of your Strait links receives the exact link
 // (`NSUserActivity.webpageURL`). It saves that link in an App Group the App
