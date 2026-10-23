@@ -92,6 +92,27 @@ public func collectDevice() -> DeviceFields {
     return DeviceFields(screenWidth: width, pixelRatio: scale, language: lang, timezone: tz)
 }
 
+/// This device's class for the engine: "tablet" on an iPad, "phone" on an iPhone, else nil.
+/// `UIDevice.model` names the hardware, so an iPhone-only app on an iPad still says "iPad".
+public func currentDeviceClass() -> String? {
+    #if canImport(UIKit) && !os(watchOS) && !os(tvOS) && !targetEnvironment(macCatalyst)
+    let model = Thread.isMainThread ? UIDevice.current.model : DispatchQueue.main.sync { UIDevice.current.model }
+    var onMac = false
+    if #available(iOS 14.0, *) { onMac = ProcessInfo.processInfo.isiOSAppOnMac }
+    return deviceClassFor(model: model, onMac: onMac)
+    #else
+    return nil
+    #endif
+}
+
+/// "iPad" -> tablet, "iPhone" / "iPod touch" -> phone; an iOS app running on a Mac -> nil.
+func deviceClassFor(model: String, onMac: Bool) -> String? {
+    if onMac { return nil }
+    if model.hasPrefix("iPad") { return "tablet" }
+    if model.hasPrefix("iPhone") || model.hasPrefix("iPod") { return "phone" }
+    return nil
+}
+
 #if canImport(UIKit)
 import UIKit
 #endif

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.3
+
+- `/v1/resolve` and `/v1/open` reports (queued retries too) and the store sheet now send `deviceClass`
+  (`"tablet"` on an iPad, `"phone"` on an iPhone; contract B14, engine ADR 0039). iPadOS Safari sends a
+  Mac user agent, so only the app can tell Strait a tap came from an iPad. New
+  `StraitLinksConfig.deviceClass` (defaults to the current device, `nil` sends nothing); older engines
+  ignore the field. Conformance vectors v9 (the `deviceClass` size rule is exempt: iOS reads the model).
+- Docs: iPhone links are live (tested on a real iPhone 16 Pro, iOS 26, 21 Oct 2026), iPhone install
+  matching is opt-in (off until you choose it), the store sheet is new and the App Clip handoff is
+  optional and not yet tried on a device, in the README, the reference app and the doc comments. No
+  behaviour change.
+- Reference app UI tests run on iPhone and iPad simulators (`SafariHomepageUITests` added).
+
 ## 0.9.2
 
 - Fix: a link that opens the app while the first-launch deferred check is still running is no

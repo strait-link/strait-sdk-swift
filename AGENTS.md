@@ -3,14 +3,14 @@
 Instructions for AI coding agents (Claude Code, Cursor, Codex, Copilot…) that add this SDK to an app or work on
 this repo. Humans: see README.md.
 
-Swift Package for iPhone and iPad apps. iPhone install matching (deferred deep links on iOS) is in **beta**: say so to the user.
+Swift Package for iPhone and iPad apps. iPhone links (Universal Links) are **live**, tested on a real iPhone. iPhone install matching (deferred deep links on iOS) is **opt-in** and an Estimated match: say so to the user.
 
 ## Install
 
 Swift Package Manager: `https://github.com/bazingga08/strait-sdk-swift`, version 0.9.0 or later.
 
 ```swift
-.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.9.2")
+.package(url: "https://github.com/bazingga08/strait-sdk-swift", from: "0.9.3")
 // target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
 
@@ -52,8 +52,8 @@ These steps need a person; you can't do them from code. Ask, then continue:
 - **Dashboard settings:** the Apple Team ID, bundle ID and custom scheme go in Dashboard → Settings (there is no
   settings API yet). Ask for the values, or ask the human to save them.
 - **Xcode signing:** the Associated Domains capability needs the human's Apple developer account.
-- **A real iPhone:** only a person can tap a link on a device. iPhone install matching is in beta, so tell them
-  a deferred match on iPhone is not yet proven on a real device.
+- **A real iPhone:** only a person can tap a link on a device. iPhone install matching is opt-in, so tell them
+  a deferred match on iPhone is proven on simulators, not yet on a real device.
 - **App Store / TestFlight upload**, and any change to the secret key (`st_live_…`): always the human.
 
 ## Verify loop (run in this order, no phone needed until step 5)
@@ -83,10 +83,10 @@ adb shell pm get-app-links <package.name>   # Android only; on iPhone, long-pres
 
 3. Tap a link from WhatsApp or Gmail on a real phone: the app opens on the right screen and `onLink` fires
    with `matched: true`. The tap and the open appear in Dashboard → Analytics.
-4. Deferred (iPhone, beta): delete the app, tap the link in Safari, then install your build and open it: `onLink`
+4. Deferred (iPhone, opt-in): delete the app, tap the link in Safari, then install your build and open it: `onLink`
    fires with `kind == .deferred` and `route == .fingerprint` (device matching on) or `.clipboard` (paste
    handoff on). The workspace picks these in Dashboard → Settings → iPhone installs (device matching is off by
-   default for new workspaces). iPhone install matching is in beta.
+   default for new workspaces). iPhone install matching is opt-in and an Estimated match.
 
 If links open the browser: a missing SHA-256 (most often the Play App Signing key from Play Console → App
 integrity), a typo in the host, or the app was installed before the files were right (reinstall). See
@@ -103,7 +103,7 @@ https://straitlink.in/docs/troubleshooting/.
 - Wire names are part of the contract: query params `strait_click` / `strait_link`, storage keys `strait.*`,
   headers `X-Strait-*`. Don't rename them.
 - Brand: the name is spelled Strait (never "Straight"; the tagline "Straight to the screen. On the record." is fine). Don't write superlatives ("best", "cheapest") or speed / match-rate numbers in
-  docs or comments. iPhone install matching is in beta.
+  docs or comments. iPhone links are live; iPhone install matching is opt-in and an Estimated match.
 
 ## More
 

@@ -25,12 +25,12 @@ private func storeSheetReply(matching: Bool = true, handoff: Any = NSNull(), cam
      "ios": ["appStoreId": "1234567890", "campaignToken": campaign, "deviceMatching": matching, "handoffUrl": handoff]]
 }
 
-private func client(_ engine: FakeEngine, pasteboard: StraitPasteboard = SystemPasteboard()) -> StraitLinks {
+private func client(_ engine: FakeEngine, pasteboard: StraitPasteboard = SystemPasteboard(), deviceClass: String? = nil) -> StraitLinks {
     StraitLinks(StraitLinksConfig(
         publishableKey: "bk_pub_test_appowner01", endpoint: "https://hilltop.strait.link", storage: MemoryStorage(),
         transport: engine, now: { 1_000_000 },
         device: { DeviceFields(screenWidth: 393, pixelRatio: 3, language: "en-IN", timezone: "Asia/Kolkata") },
-        callbackQueue: nil, observeLifecycle: false, pasteboard: pasteboard
+        callbackQueue: nil, observeLifecycle: false, pasteboard: pasteboard, deviceClass: deviceClass
     ))
 }
 
@@ -41,6 +41,12 @@ private func open(_ s: StraitLinks, _ options: StoreSheetOptions = StoreSheetOpt
 }
 
 final class StoreSheetTests: XCTestCase {
+    func testSendsTheDeviceClass() throws {
+        let engine = FakeEngine(["/v1/store-sheet": storeSheetReply(), "/v1/match-save": [:]])
+        _ = open(client(engine, deviceClass: "tablet"))
+        XCTAssertEqual(try XCTUnwrap(engine.calls(to: "/v1/store-sheet").first?.body)["deviceClass"] as? String, "tablet")
+    }
+
     func testProductPageWithCampaignAndDeviceMatchSaved() throws {
         let engine = FakeEngine(["/v1/store-sheet": storeSheetReply(), "/v1/match-save": [:]])
         let presenter = SpyPresenter()

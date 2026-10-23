@@ -4,7 +4,7 @@
 #
 #   scripts/testflight.sh            # archive + upload to App Store Connect
 #   scripts/testflight.sh --export   # archive + export an .ipa only (no upload)
-#   STRAIT_APP_CLIP=1 scripts/testflight.sh   # include the App Clip (beta)
+#   STRAIT_APP_CLIP=1 scripts/testflight.sh   # include the App Clip (optional)
 #
 # Before the first upload the founder creates the app record in App Store
 # Connect for the bundle ID in Config/Team.xcconfig (see IOS-READY.md).

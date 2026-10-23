@@ -48,6 +48,12 @@ final class DeviceProofUITests: XCTestCase {
         add(a)
     }
 
+    /// A tab: the bottom TabBar on iPhone, the floating tab strip at the top on iPad (plain buttons there).
+    private func tab(_ a: XCUIApplication, _ name: String) -> XCUIElement {
+        let bar = a.tabBars.buttons[name]
+        return bar.exists ? bar : a.buttons[name].firstMatch
+    }
+
     private func label(_ a: XCUIApplication, _ id: String) -> String {
         let e = a.descendants(matching: .any)[id]
         return e.exists ? e.label : "missing"
@@ -55,7 +61,7 @@ final class DeviceProofUITests: XCTestCase {
 
     /// Waits until the newest event contains `s` (or times out) and returns it.
     private func waitForEvent(_ a: XCUIApplication, containing s: String, timeout: TimeInterval = 25) -> String {
-        a.tabBars.buttons["Links"].tapIfHittable()
+        tab(a, "Links").tapIfHittable()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             let v = label(a, "lastEvent")
@@ -102,7 +108,7 @@ final class DeviceProofUITests: XCTestCase {
     func test01_RuntimeChoiceIsLive() throws {
         let a = app()
         a.launch()
-        a.tabBars.buttons["Settings"].tap()
+        tab(a, "Settings").tap()
         a.buttons["askStrait"].tap()
         let summary = a.staticTexts["runtimeSummary"]
         let deadline = Date().addingTimeInterval(20)
@@ -121,10 +127,13 @@ final class DeviceProofUITests: XCTestCase {
     func test02_AASAListsThisApp() throws {
         let a = app()
         a.launch()
-        a.tabBars.buttons["Settings"].tap()
+        tab(a, "Settings").tap()
         let appId = label(a, "appId")
         try XCTSkipIf(appId.hasPrefix("unsigned"), "unsigned build: no App ID to compare")
-        a.buttons["checkAasa"].tap()
+        // The button sits below the fold on some screens (the List only builds rows it shows).
+        let check = a.buttons["checkAasa"]
+        for _ in 0..<6 where !(check.exists && check.isHittable) { a.swipeUp() }
+        check.tap()
         let result = a.staticTexts["aasaResult"]
         let deadline = Date().addingTimeInterval(20)
         while Date() < deadline, !result.exists || result.label.hasPrefix("Fetching") { usleep(300_000) }
@@ -238,7 +247,7 @@ final class DeviceProofUITests: XCTestCase {
         sleep(3)
         let a = app()
         a.launch()
-        a.tabBars.buttons["Paste"].tap()
+        tab(a, "Paste").tap()
         let paste = a.descendants(matching: .any)["straitPaste"]
         XCTAssertTrue(paste.waitForExistence(timeout: 10))
         paste.tap()
@@ -255,10 +264,11 @@ final class DeviceProofUITests: XCTestCase {
         try requireLink()
         let a = app()
         a.launch()
-        a.tabBars.buttons["Store sheet"].tap()
+        tab(a, "Store sheet").tap()
         let field = a.textFields["storeLink"]
         field.tap()
         field.clearAndType(link)
+        field.typeText("\n") // close the keyboard so it can't cover the button
         a.buttons["storeProductPage"].tap()
         sleep(6) // the App Store product page loads inside the app
         shot("07-store-sheet")
@@ -289,6 +299,8 @@ private extension XCUIElement {
     func tapIfHittable() { if exists && isHittable { tap() } }
 
     func clearAndType(_ text: String) {
+        // Put the cursor at the end first: a plain tap lands mid-text, so deletes would leave a tail.
+        coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
         if let current = value as? String, !current.isEmpty {
             typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
         }

@@ -1,6 +1,8 @@
 # Real-iPhone test plan (StraitReference)
 
-iPhone stays **beta** until every row marked **gate** passes on a real iPhone.
+21 Oct 2026, real iPhone 16 Pro (iOS 26): A1-A5 and A8 passed, so iPhone links are live.
+A9 (store sheet) stops at `no_app_store_id` until this app has its own App Store record.
+The remaining **gate** rows decide when install matching stops being only opt-in.
 Each row lists how it runs: **auto** (`scripts/device-proof.sh`, XCUITest on the
 connected phone, screenshots in `proof/<time>/*-shots/`) or **manual** (do it by
 hand and take a screenshot with side button + volume up; name it as given).
@@ -71,7 +73,7 @@ Send the link to yourself in each app and tap it there.
 | D2 | Instagram (DM or bio link) | Instagram's own browser: Strait's in-app page; **Open in app** opens the app via `straitref://` or the Universal Link; `D2-installed.png` | page → Get the app (may need "Open in Safari" first); record whether the deferred link survives; `D2-not-installed.png` | gate |
 | D3 | Gmail / Telegram / Slack (optional) | record | record | |
 
-## E. App Clip (only with `STRAIT_APP_CLIP=1`, beta)
+## E. App Clip (only with `STRAIT_APP_CLIP=1`; optional, new)
 
 Needs migration 0062 applied and the App Clip bundle ID saved in the dashboard
 (the AASA then lists `appclips`). On the phone: Settings → Developer → App Clips
@@ -88,4 +90,4 @@ Testing → Local Experiences → Register: URL prefix `https://<host>/`, bundle
 
 Copy `proof/<time>/SUMMARY.txt` and the screenshots to
 `strait/design-work/ios-verify/real-device-<date>/`, fill in this table there,
-and only when every **gate** row passes, change the iPhone label from beta.
+and change a label only for the rows that passed (links went live on 21 Oct).

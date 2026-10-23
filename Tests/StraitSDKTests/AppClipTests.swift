@@ -1,7 +1,7 @@
 @testable import StraitSDK
 import XCTest
 
-/// App Clip -> full app handoff through a shared App Group (beta).
+/// App Clip -> full app handoff through a shared App Group (optional, new).
 final class AppClipTests: XCTestCase {
     private let link = URL(string: "https://hilltop.strait.link/sale?utm_source=qr")!
 
