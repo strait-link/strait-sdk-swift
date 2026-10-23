@@ -15,8 +15,8 @@ A tap opens the exact screen, and every link open and install is recorded in you
 
 <p align="center">
   <a href="https://github.com/bazingga08/strait-sdk-swift/tags"><img alt="Latest version" src="https://img.shields.io/github/v/tag/bazingga08/strait-sdk-swift?sort=semver&label=version&style=flat-square&labelColor=0F0D0A&color=423B33"></a>
-  <a href="https://straitlink.in/platform-status/"><img alt="SDK: Beta" src="https://img.shields.io/badge/SDK-beta-423B33?style=flat-square&labelColor=0F0D0A"></a>
-  <a href="https://straitlink.in/docs/iphone-install-matching/"><img alt="iPhone: Beta" src="https://img.shields.io/badge/iPhone-beta-423B33?style=flat-square&labelColor=0F0D0A"></a>
+  <a href="https://straitlink.in/platform-status/"><img alt="SDK: Live" src="https://img.shields.io/badge/SDK-live-423B33?style=flat-square&labelColor=0F0D0A"></a>
+  <a href="https://straitlink.in/iphone-status/"><img alt="iPhone: Live" src="https://img.shields.io/badge/iPhone-live-423B33?style=flat-square&labelColor=0F0D0A"></a>
   <a href="https://github.com/bazingga08/strait-sdk-swift/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/bazingga08/strait-sdk-swift/ci.yml?branch=main&label=CI&style=flat-square&labelColor=0F0D0A"></a>
   <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-423B33?style=flat-square&labelColor=0F0D0A"></a>
 </p>
@@ -42,22 +42,23 @@ Part of [Strait](https://straitlink.in). The match signature is a Swift port kep
 the server and every other SDK via shared golden vectors
 (run by `swift test` in CI). 32-bit hash overflow is matched with `Int32` + `&*`.
 
-> ⚠️ Verified by CI (`swift test` on macOS) against the golden vectors and on the
-> iOS simulator (Safari tap -> deferred match, custom scheme, paste button). Not yet
-> proven on a real iPhone: the signable reference app and the scripted real-device
-> proof are ready in [`Examples/StraitReference`](Examples/StraitReference/README.md).
+> Verified by CI (`swift test` on macOS) against the golden vectors, on iPhone and iPad
+> simulators (Universal Links, custom scheme, deferred first open), and on a real iPhone 16 Pro
+> (iOS 26, 21 Oct 2026): Universal Links open the app on the link's screen with the app open, in
+> the background and closed. The scripted real-device proof is in
+> [`Examples/StraitReference`](Examples/StraitReference/README.md).
 
 ## Platform features
 
 | Feature | Status | Notes |
 |---|---|---|
-| Direct links: Universal Links and custom schemes | ◐ Beta | Not yet proven on a real iPhone. |
-| iPhone install matching (deferred links) | ◐ Beta | Your choice in Dashboard → Settings → iPhone installs: device matching, paste handoff, both or neither, read from Strait at runtime. Device matching is off by default. iPhone matches are labelled Estimated until measured. |
-| Paste button (`StraitPasteButton`, iOS 16+) | ◐ Beta | Apple's system Paste control in Strait colours; the tap is the consent, so no paste prompt. |
-| Store sheet: the App Store inside your app | ◐ Beta | Keeps the deep link through the install. |
+| Direct links: Universal Links and custom schemes | ● Live | Tested on a real iPhone (iOS 26), 21 Oct 2026: app open, in the background and closed. |
+| iPhone install matching (deferred links) | Opt-in | Off until you choose it. Proven on iPhone simulators; the real-iPhone run waits on our App Store listing. Your choice in Dashboard → Settings → iPhone installs: device matching, paste handoff, both or neither, read from Strait at runtime. Device matching is off by default. iPhone matches are labelled Estimated until measured. |
+| Paste button (`StraitPasteButton`, iOS 16+) | Opt-in | Used only when paste handoff is on. Apple's system Paste control in Strait colours; the tap is the consent, so no paste prompt. |
+| Store sheet: the App Store inside your app | New | Keeps the deep link through the install. Needs your app's App Store ID; our own real-iPhone run waits on our App Store listing. |
 | Swift Package Manager | ● Live | From this repo's version tags. |
 
-● Live · ◐ Beta · ○ Planned · – Not yet. The same words as the [platform status](https://straitlink.in/platform-status/) page.
+● Live · ◐ Beta · ○ Planned · – Not yet · Opt-in: off until you switch it on · New: released, still young. The same words as the [platform status](https://straitlink.in/platform-status/) page.
 
 ## Install
 
@@ -187,7 +188,7 @@ strait.compareFingerprint { json in }  // engine's app-vs-browser comparison
 strait.checkDeferred { event in }      // re-run the deferred check (debugging)
 ```
 
-### iPhone (beta): you choose the deferred-link method
+### iPhone: you choose the deferred-link method
 
 Dashboard → Settings → **iPhone installs** has two switches. You make the choice,
 and it applies at runtime: on the first launch the SDK asks Strait
@@ -293,7 +294,7 @@ let button = StraitPasteButton(straitLinks: strait, configuration: config)
 |---|---|
 | ![Paste button, light](.github/assets/paste-button-light.png) | ![Paste button, dark](.github/assets/paste-button-dark.png) |
 
-### Store sheet (beta; iPhone is beta)
+### Store sheet (new)
 
 When a user taps **Install** for one of your other apps (a sibling, partner or
 "lite" app), show the App Store *inside your app* and keep the deep link for the
@@ -312,11 +313,11 @@ strait.openStoreSheet(
 What it does:
 
 1. `POST /v1/store-sheet` records the tap (`sent_to = store_sheet`, not billed
-   during the beta) and returns the App Store id and the link's campaign, sent
+   while the store sheet is new) and returns the App Store id and the link's campaign, sent
    as the `ct` campaign token.
 2. Unless the workspace turned iPhone install matching off, it saves this
    device's match fields for that tap (`POST /v1/match-save`). The installed
-   app's normal deferred check finds it. iPhone matching is beta.
+   app's normal deferred check finds it. iPhone matching is opt-in and an Estimated match.
 3. With `copyHandoffLink: true` and the workspace's paste handoff on, it also
    copies the one-time handoff link; the installed app claims it for an exact
    match. Off by default, because it replaces what the
@@ -342,7 +343,7 @@ It is for display only: the SDK acts on each reply as it arrives and never store
 the choice. An engine older than the runtime-choice release sends no `ios` object,
 so it stays nil.
 
-### App Clip handoff (beta)
+### App Clip handoff (optional, new: not yet tried on a device)
 
 If your app ships an App Clip, a link on your link host can open the App Clip with
 the exact URL. Save it in an App Group both targets share; the full app's first
@@ -369,7 +370,7 @@ Both targets need the same App Groups capability; the App Clip needs
 your link host's `apple-app-site-association` lists it under `appclips`. A saved
 link is usable for 7 days and handed over once.
 
-### Real iPhone checklist (beta)
+### Real iPhone checklist
 
 1. Xcode → Signing & Capabilities: your team; **Associated Domains** →
    `applinks:<handle>.strait.link`; your custom scheme under URL Types.

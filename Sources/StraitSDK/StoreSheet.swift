@@ -4,7 +4,7 @@ import StoreKit
 import UIKit
 #endif
 
-// Store sheet (beta; the iPhone side of Strait is beta). Show the App Store
+// Store sheet (new). Show the App Store
 // INSIDE your app for one of your Strait links, and keep the deep link across
 // the install:
 //
@@ -133,7 +133,7 @@ public enum StoreSheet {
 }
 
 extension StraitLinks {
-    /// Store sheet (beta): show the App Store inside your app for one of your
+    /// Store sheet (new): show the App Store inside your app for one of your
     /// short links, keeping the deep link for the app being installed.
     /// `completion` runs on the config's callback queue.
     public func openStoreSheet(url: String, options: StoreSheetOptions = StoreSheetOptions(),
@@ -187,7 +187,7 @@ extension StraitLinks {
 }
 
 extension Strait {
-    /// Store sheet (beta): same as `StraitLinks.openStoreSheet`.
+    /// Store sheet (new): same as `StraitLinks.openStoreSheet`.
     public static func openStoreSheet(_ links: StraitLinks, url: String, options: StoreSheetOptions = StoreSheetOptions(),
                                       presenter: StoreSheetPresenting, completion: ((StoreSheetResult) -> Void)? = nil) {
         links.openStoreSheet(url: url, options: options, presenter: presenter, completion: completion)

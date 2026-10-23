@@ -4,7 +4,7 @@
 #
 #   scripts/set-team.sh <TEAM_ID> <BUNDLE_PREFIX> [<link host>]   # once
 #   scripts/generate.sh                     # project.yml -> StraitReference.xcodeproj
-#   STRAIT_APP_CLIP=1 scripts/generate.sh   # + the App Clip target (beta)
+#   STRAIT_APP_CLIP=1 scripts/generate.sh   # + the App Clip target (optional)
 #   scripts/build-device.sh                 # generic iOS device build, signing off
 #
 # Team, bundle prefix and link host live in Config/Team.xcconfig (set-team.sh).
