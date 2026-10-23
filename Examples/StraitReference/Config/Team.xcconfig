@@ -3,7 +3,7 @@
 //
 // DEVELOPMENT_TEAM empty = the placeholder team: the project still builds for
 // a device with signing off (scripts/build-device.sh), it just can't install.
-DEVELOPMENT_TEAM =
+DEVELOPMENT_TEAM = C3L6B5HJU7
 // App = $(BUNDLE_PREFIX).reference, App Clip = $(BUNDLE_PREFIX).reference.Clip
 BUNDLE_PREFIX = in.straitlink
 // The Strait workspace link host the app claims (applinks:/appclips:).

@@ -5,7 +5,7 @@ TestFlight and an optional App Clip. iPhone support stays **beta** until the
 real-device proof below has passed.
 
 <!-- set-team:values -->
-Team: placeholder (not set) · app `in.straitlink.reference` · host `strait-dev.strait.link` (set with `scripts/set-team.sh`)
+Team `C3L6B5HJU7` · app `in.straitlink.reference` · App Clip `in.straitlink.reference.Clip` · App Group `group.in.straitlink.reference` · host `strait-dev.strait.link` (set with `scripts/set-team.sh`; details in WORKSPACE.md)
 <!-- /set-team:values -->
 
 What it shows:
