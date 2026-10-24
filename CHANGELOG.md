@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.4
+
+- New `StraitLinks.doctor(bundleId:completion:)`: a setup check for debug builds (contract B23,
+  shared-spec ADR 0002). One GET of `{endpoint}/.well-known/apple-app-site-association`, then the
+  pure `doctorFindings(publishableKey:endpoint:platform:appId:file:)` over the key (publishable,
+  secret or neither), the endpoint, the file and the bundle ID (`app.listed` when an appID ends
+  with `.{bundleId}`; the title shows the full appID). Never throws, prints each finding, completes
+  on `callbackQueue` with `DoctorReport { ok, findings }`. Same ids and wording in every SDK. No new
+  dependency, no engine change.
+
 ## 0.9.3
 
 - `/v1/resolve` and `/v1/open` reports (queued retries too) and the store sheet now send `deviceClass`

@@ -210,7 +210,7 @@ public final class StraitLinks {
     public static let tapKey = "strait.lastTap"
 
     let config: StraitLinksConfig
-    private let base: String
+    let base: String
     private let linkHosts: [String]
     private let tracker = AppStateTracker()
     private let lock = NSLock()

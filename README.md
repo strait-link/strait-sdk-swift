@@ -83,7 +83,7 @@ Swift Package Manager:
 Xcode: **File → Add Package Dependencies…** and paste the repo URL, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/strait-link/strait-sdk-swift", from: "0.9.3")
+.package(url: "https://github.com/strait-link/strait-sdk-swift", from: "0.9.4")
 // target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
 <!-- /brand:install -->
@@ -403,6 +403,32 @@ link is usable for 7 days and handed over once.
 with one script (`scripts/set-team.sh TEAMID BUNDLE_PREFIX`) and proves it with an
 XCUITest on a connected iPhone (`scripts/device-proof.sh`).
 
+### Check your setup (doctor)
+
+In a debug build, ask the SDK whether this app is set up for its link domain. One GET of
+`{endpoint}/.well-known/apple-app-site-association`; it never throws, never runs by itself, prints
+each finding and completes on `callbackQueue` (contract B23).
+
+```swift
+#if DEBUG
+strait.doctor { report in            // bundleId defaults to Bundle.main.bundleIdentifier
+    report.findings.forEach { print($0.severity, $0.id, $0.title, $0.fix) }
+}
+#endif
+```
+
+**You should see** (Xcode console):
+
+```
+[Strait doctor] ok: Publishable key is set
+[Strait doctor] ok: <handle>.strait.link lists TEAMID.com.yourapp
+```
+
+An `error` line carries its fix, e.g. `<handle>.strait.link doesn't list com.yourapp. Add
+com.yourapp in Dashboard → Apps & stores (listed now: …)`. `report.ok` is false when any finding is
+an `error`. iOS can't read its Team ID, so check that the Team ID in the `lists` line is yours.
+The ids and wording are the same in every Strait SDK; `doctorFindings(...)` is the pure check behind it.
+
 ### Old Firebase page.link links (contract B22)
 
 Moving off Firebase Dynamic Links? People who already have your app can keep opening it from old
@@ -450,7 +476,8 @@ A `LinkStart` with the same `id` fires first, before any network call.
 | B17 `screenWidth` is the portrait width: `portraitScreenWidth(bounds.width, bounds.height)` in any orientation | ✓ |
 | B18 reported/queued URLs stripped to host + path (+ `utm_source`) via `reportUrl`; expired remembered taps deleted (`staleTap`) | ✓ |
 | B19 paste handoff: chosen in the dashboard and read from the `/v1/match` reply (`ios.pasteHandoff`) at runtime; `clipboardBoost` deprecated, `detectPatterns` first (no prompt), read only when a URL is likely, `parseHandoffUrl`, `POST /v1/handoff/claim`; `claimHandoff(text:)` + `StraitPasteButton` | ✓ |
-| B22 old Firebase `*.page.link` links: short link → `/v1/resolve` (engine matches the old host + code); long link `/?link=<url>` → the `link` value is the destination, read on the device, no lookup (`pageLinkLongLink`, vectors v8) | ✓ (B1–B6, B8–B19, B22) |
+| B22 old Firebase `*.page.link` links: short link → `/v1/resolve` (engine matches the old host + code); long link `/?link=<url>` → the `link` value is the destination, read on the device, no lookup (`pageLinkLongLink`, vectors v8) | ✓ |
+| B23 `doctor()` setup check: one GET of the AASA, then `doctorFindings` (key, endpoint, host, bundle ID; ids and wording from shared-spec ADR 0002) | ✓ (B1–B6, B8–B19, B22, B23) |
 
 Both `test-vectors.json` (signature) and `conformance-vectors.json` (pure
 helpers) run under `swift test` in CI.
