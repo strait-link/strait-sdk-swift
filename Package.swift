@@ -12,7 +12,7 @@ let package = Package(
         .testTarget(
             name: "StraitSDKTests",
             dependencies: ["StraitSDK"],
-            resources: [.copy("test-vectors.json"), .copy("conformance-vectors.json")]
+            resources: [.copy("test-vectors.json"), .copy("conformance-vectors.json"), .copy("doctor-vectors.json")]
         ),
     ]
 )
