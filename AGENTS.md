@@ -10,7 +10,7 @@ Swift Package for iPhone and iPad apps. iPhone links (Universal Links) are **liv
 Swift Package Manager: `https://github.com/strait-link/strait-sdk-swift`, version 0.9.0 or later.
 
 ```swift
-.package(url: "https://github.com/strait-link/strait-sdk-swift", from: "0.9.3")
+.package(url: "https://github.com/strait-link/strait-sdk-swift", from: "0.9.4")
 // target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
 
