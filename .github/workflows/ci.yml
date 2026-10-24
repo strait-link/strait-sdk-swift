@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   test:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: swift test
@@ -15,3 +15,15 @@ jobs:
       # Compile for iOS too: UIKit code (clipboard boost, StraitPasteButton) is skipped on macOS.
       - run: xcodebuild -scheme StraitSDK -destination 'generic/platform=iOS' -skipPackagePluginValidation build CODE_SIGNING_ALLOWED=NO
       - run: node scripts/brand.mjs
+      # The example app (Examples/StraitReference) built against this repo's source: iOS Simulator,
+      # signing off, no key, no network calls. XcodeGen is pinned by version and checksum.
+      - name: Build example app (StraitReference)
+        working-directory: Examples/StraitReference
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
+          echo "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          "$RUNNER_TEMP/xcodegen/bin/xcodegen" generate --spec project.yml --quiet
+          xcodebuild build -project StraitReference.xcodeproj -scheme StraitReference \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData \
+            -skipPackagePluginValidation CODE_SIGNING_ALLOWED=NO -quiet
