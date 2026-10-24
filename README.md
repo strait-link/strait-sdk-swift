@@ -48,6 +48,21 @@ the server and every other SDK via shared golden vectors
 > the background and closed. The scripted real-device proof is in
 > [`Examples/StraitReference`](Examples/StraitReference/README.md).
 
+## Quick start (60 seconds)
+
+**1. Install.** In Xcode, **File → Add Package Dependencies…**, paste `https://github.com/strait-link/strait-sdk-swift` and add the `StraitSDK` product.
+
+**2. Check your key and a link.** In **Dashboard → Links**, make a link with the path `summer` and the destination `https://shop.example.com/product/42`. Then ask Strait about it the way this SDK will:
+
+```sh
+curl -s https://<your-handle>.strait.link/v1/resolve -H 'Content-Type: application/json' \
+  -d '{"publishableKey":"st_pub_live_…","url":"https://<your-handle>.strait.link/summer","platform":"ios"}'
+```
+
+**You should see:** `{"matched":true,"longUrl":"https://shop.example.com/product/42",…}`. The key comes from **Dashboard → Get started** and is safe in apps. `"reason":"not_found"` means the key is from another workspace or the path is wrong. The check counts as one tap in **Dashboard → Analytics**.
+
+**3. Wire it.** Create one `StraitLinks` at launch as in [Use](#use--straitlinks-direct--deferred-links-analytics), with your key and link address. The [iPhone quickstart](https://straitlink.in/docs/quick-start/iphone/) adds Associated Domains and a tap test with what the app should print.
+
 ## Platform features
 
 | Feature | Status | Notes |
