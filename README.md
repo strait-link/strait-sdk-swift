@@ -472,6 +472,23 @@ It's safe to include in your app. Never put your secret key (`st_live_…`) in a
 Collects only coarse device fields (screen width, scale, language, timezone);
 the **server** adds the observed IP and computes the match signature.
 
+## Example app
+
+[`Examples/StraitReference`](Examples/StraitReference/README.md) is a small iOS app built on this
+package from this repo (`../..`): Universal Links, the `straitref://` fallback, the store sheet,
+the Paste button and the live iPhone-install settings. CI builds it on every pull request. To build
+it yourself (needs Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen), no Apple account):
+
+```sh
+cd Examples/StraitReference
+scripts/generate.sh        # project.yml -> StraitReference.xcodeproj
+xcodebuild build -project StraitReference.xcodeproj -scheme StraitReference \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+```
+
+To run it on a simulator or an iPhone, open `StraitReference.xcodeproj` in Xcode. Signing,
+your link host and your publishable key are set up in its [README](Examples/StraitReference/README.md).
+
 ## Docs and support
 
 - **Docs:** [straitlink.in/docs/sdks/ios/](https://straitlink.in/docs/sdks/ios/) · [platform status](https://straitlink.in/platform-status/) · [troubleshooting](https://straitlink.in/docs/troubleshooting/)
