@@ -87,7 +87,32 @@ func decode(_ s: String) -> String {
     s.replacingOccurrences(of: "+", with: " ").removingPercentEncoding ?? s
 }
 
-private let bareHost = try! NSRegularExpression(pattern: "^[a-z0-9.-]+(:\\d+)?$", options: [.caseInsensitive])
+// normalizeLinkHosts runs in StraitLinks.init, on the main thread at app launch. The first
+// NSRegularExpression in a process loads ICU (~0.6 ms), so these two checks are plain ASCII scans
+// with the same rules as the regexes they replace (and the JS reference's ASCII \\d) (H3).
+private func isAsciiLetter(_ b: UInt8) -> Bool { (b | 0x20) >= 0x61 && (b | 0x20) <= 0x7A }
+private func isAsciiDigit(_ b: UInt8) -> Bool { b >= 0x30 && b <= 0x39 }
+
+/// `splitUrl(u)?.host`: the lower-cased host of `scheme://host…`, or nil when `u` has no scheme.
+private func schemeHost(_ u: String) -> String? {
+    let b = Array(u.utf8)
+    guard let first = b.first, isAsciiLetter(first) else { return nil }
+    var i = 1
+    while i < b.count, isAsciiLetter(b[i]) || isAsciiDigit(b[i]) || b[i] == 0x2B || b[i] == 0x2E || b[i] == 0x2D { i += 1 }
+    guard b[i...].starts(with: [0x3A, 0x2F, 0x2F]) else { return nil } // "://"
+    let host = b[(i + 3)...].prefix { $0 != 0x2F && $0 != 0x3F && $0 != 0x23 } // up to / ? #
+    return String(decoding: host, as: UTF8.self).lowercased()
+}
+
+/// `^[a-z0-9.-]+(:\\d+)?$`, case-insensitive.
+private func isBareHost(_ t: String) -> Bool {
+    let b = Array(t.utf8)
+    var i = 0
+    while i < b.count, isAsciiLetter(b[i]) || isAsciiDigit(b[i]) || b[i] == 0x2E || b[i] == 0x2D { i += 1 }
+    if i == 0 { return false }
+    if i == b.count { return true }
+    return b[i] == 0x3A && i + 1 < b.count && b[(i + 1)...].allSatisfy(isAsciiDigit)
+}
 
 /// The hosts that serve Strait short links: the endpoint's host plus each of
 /// `linkHosts`, given as URLs (`https://go.brand.com`) or bare hosts
@@ -97,8 +122,7 @@ func normalizeLinkHosts(_ endpoint: String, _ linkHosts: [String] = []) -> [Stri
     var out: [String] = []
     for h in [endpoint] + linkHosts {
         let t = h.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isBare = bareHost.firstMatch(in: t, range: NSRange(location: 0, length: (t as NSString).length)) != nil
-        let host = splitUrl(h)?.host ?? (isBare ? t.lowercased() : nil)
+        let host = schemeHost(t) ?? (isBareHost(t) ? t.lowercased() : nil)
         if let host = host, !host.isEmpty, !out.contains(host) { out.append(host) }
     }
     return out

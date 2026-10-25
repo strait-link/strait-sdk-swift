@@ -83,7 +83,7 @@ Swift Package Manager:
 Xcode: **File → Add Package Dependencies…** and paste the repo URL, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/strait-link/strait-sdk-swift", from: "0.9.4")
+.package(url: "https://github.com/strait-link/strait-sdk-swift", from: "0.9.5")
 // target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
 <!-- /brand:install -->
@@ -498,6 +498,15 @@ It's safe to include in your app. Never put your secret key (`st_live_…`) in a
 
 Collects only coarse device fields (screen width, scale, language, timezone);
 the **server** adds the observed IP and computes the match signature.
+
+## Size and speed
+
+Measured 25 Oct 2026 on 0.9.5.
+
+| What | Size or time | How it was measured |
+|---|---|---|
+| In your app | about 282 KB added to a stripped arm64 iOS binary (174 KB of it machine code), no dependencies. The App Store compresses and thins it further | a minimal app that calls `StraitLinks`, `swiftc -O -wmo`, `-dead_strip`, with and without the SDK |
+| Start-up on the main thread | 0.02 ms for `StraitLinks(config)` + under 0.3 ms for `start()`. 0.9.4 took 0.80 ms in `StraitLinks(config)`, nearly all of it the first `NSRegularExpression` loading ICU | XCTest, release build, macOS arm64, a fresh process each run, median of 7 |
 
 ## Example app
 
