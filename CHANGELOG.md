@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.5
+
+- Faster start-up: `StraitLinks(config)` no longer compiles a regular expression. The first
+  `NSRegularExpression` in a process loads ICU, which made `StraitLinks(config)` take 0.80 ms on the
+  main thread; it now takes 0.02 ms (link-host checks are plain ASCII scans with the same rules,
+  tested against the old regex code). One edge case now matches the other SDKs: a port written in
+  non-ASCII digits (`a.com:١٢`) is no longer accepted as a link host. No API change.
+- README: a "Size and speed" table (binary size in an app, start-up time, how each was measured).
+
 ## 0.9.4
 
 - New `StraitLinks.doctor(bundleId:completion:)`: a setup check for debug builds (contract B23,
