@@ -201,8 +201,9 @@
 - Package, product, module and targets: `StraitSDK`
   (`import StraitSDK`), test target `StraitSDKTests`. Repo / package identity
   `strait-sdk-swift`.
-- Types: `Strait`, `StraitConfig`, `StraitLinks`, `StraitLinksConfig`, `StraitStorage`, `StraitTransport`, `StraitHTTPResponse`, `StraitSubscription`;
-  `parseStraitLink` / `parseStraitClick` → `parseStraitLink` / `parseStraitClick`.
+- Types (new names): `Strait`, `StraitConfig`, `StraitLinks`, `StraitLinksConfig`,
+  `StraitStorage`, `StraitTransport`, `StraitHTTPResponse`, `StraitSubscription`;
+  functions `parseStraitLink` / `parseStraitClick`.
 - Wire params: `strait_link` and `strait_click` only.
 - Storage keys: `strait.deferredChecked`, `strait.pendingOpens` (old values are ignored).
 - brand.json is final (Strait, https://usestrait.com, strait.link; the copyright holder is now "The Strait authors").
