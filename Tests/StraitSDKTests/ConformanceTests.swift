@@ -26,6 +26,26 @@ final class ConformanceTests: XCTestCase {
         XCTAssertEqual(c["ATTRIBUTION_WINDOW_MS"] as? Double, ATTRIBUTION_WINDOW_MS)
     }
 
+    func testFirstLaunchState() throws {
+        for v in try cases("firstLaunchState") {
+            let name = try XCTUnwrap(v["name"] as? String)
+            let e = try XCTUnwrap(v["expected"] as? [String: Any], name)
+            let expected = FirstLaunchState(
+                firstLaunch: try XCTUnwrap(e["firstLaunch"] as? Bool, name),
+                clearFlag: try XCTUnwrap(e["clearFlag"] as? Bool, name),
+                storeInstallTime: e["storeInstallTime"] as? String // null → nil
+            )
+            XCTAssertEqual(
+                firstLaunchState(flag: v["flag"] as? String, stored: v["stored"] as? String, installTime: v["installTime"] as? Double),
+                expected, name
+            )
+        }
+    }
+
+    func testVersion() {
+        XCTAssertEqual(vectors["version"] as? Int, 10)
+    }
+
     func testEventClickId() throws {
         for v in try cases("eventClickId") {
             let name = try XCTUnwrap(v["name"] as? String)

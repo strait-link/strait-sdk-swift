@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.0 (unreleased, launch week)
+
+- Fix: reinstalls from a link are no longer lost. A phone restored from an iCloud or Finder backup
+  put back the "deferred check done" flag (`UserDefaults`), so a reinstall skipped its deferred link
+  and was never counted. New `StraitLinksConfig.installTime: () -> Double?` (epoch ms): the SDK
+  stores it as `strait.installTime` and runs the check again when it changed; an app update, or an
+  app updated from an older SDK, is never a new install (contract B6a, shared-spec ADR 0003). No app
+  change needed: the default, `StraitLinksConfig.markerInstallTime()`, is the creation time of an
+  empty marker file `Application Support/Strait/install-time` in a folder excluded from backup. The
+  privacy manifest now declares the file timestamp API (C617.1).
+- New: `trackEvent(_:..., eventId:)`, your order id; the engine stores each eventId once. Left out,
+  the SDK makes one (`e_<base36 ms>_<12 chars>`), so a retry never counts twice. Events that can't be
+  sent (offline, 429, 5xx) are kept in the open-report queue (`strait.pendingOpens`, without the key)
+  and sent later to `/v1/event`; `pendingOpenReports` counts them (contract B13a, ADR 0004). The
+  completion still means "accepted now". Existing calls compile unchanged.
+- Conformance vectors v10 (`firstLaunchState`, shared-spec cdd4c70).
+
 ## 0.9.5
 
 - Faster start-up: `StraitLinks(config)` no longer compiles a regular expression. The first

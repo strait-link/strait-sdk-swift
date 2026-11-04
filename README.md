@@ -186,6 +186,18 @@ strait.flushOpenReports { }              // send them now
 - The once-per-install flag `strait.deferredChecked` and the pending open
   reports `strait.pendingOpens` live in `UserDefaults.standard` by default;
   pass any `StraitStorage` to change that.
+- Reinstalls and restored phones (`installTime`, contract B6a): an iPhone
+  restored from an iCloud or Finder backup brings `UserDefaults` back, flag
+  included, so without this a reinstall from a link would skip its deferred
+  link and go uncounted. The SDK stores the install time as
+  `strait.installTime` next to the flag and runs the check again when it
+  changed. It works with no app change: the default `installTime` is the
+  creation time of an empty marker file `Application Support/Strait/install-time`
+  in a folder excluded from backup (iOS has no install-time API), so a restored
+  phone has no marker and gets a new time, while an app update keeps it. An app
+  updated from an older SDK adopts the time without a new check. Pass
+  `installTime: { nil }` for the flag alone, or your own `() -> Double?`
+  (epoch ms). The privacy manifest declares the file timestamp API (C617.1).
 - `transport:` (a `StraitTransport`, default `URLSession.shared`), `now:` and
   `device:` are injectable for tests. Callbacks run on the main queue
   (`callbackQueue: nil` runs them on whatever thread finished the work).
@@ -193,7 +205,12 @@ strait.flushOpenReports { }              // send them now
 ### Analytics + fingerprint check
 
 ```swift
-strait.trackEvent("purchase", value: 49.99, currency: "USD", linkId: event.linkId) { ok in }
+strait.trackEvent("purchase", value: 49.99, currency: "USD", linkId: event.linkId, eventId: order.id) { ok in }
+// eventId is your id for the conversion (your order id; 1-64 of A-Z a-z 0-9 _ . : -):
+// Strait stores each one once, so a retry or a second report of the same order never
+// counts twice. Left out, the SDK makes one. An event that can't be sent (offline,
+// server busy) is kept with the saved open reports and sent later, for up to 7 days;
+// `ok` is then false (contract B13a). Refunds are not supported yet.
 // The event carries the tap id of the last attributed link open for 7 days, so
 // revenue lands on that tap's channel / A/B variant (contracts B15/B16): a
 // browser hand-off, or the engine's reply to a Universal Link or a deferred
@@ -463,6 +480,7 @@ A `LinkStart` with the same `id` fires first, before any network call.
 | B4 custom scheme / https classification (`classifyUrl`), `strait_click` removed (`takeClickId`) | ✓ |
 | B5 app-state labels (`AppStateTracker`, 2000/1000 ms) | ✓ |
 | B6 deferred once per install, skipped-but-marked when launched by a link; marked only once the engine answered | ✓ |
+| B6a reinstall-safe first open: `strait.installTime` + `firstLaunchState`; default `installTime` = backup-excluded marker file | ✓ |
 | B7 Android Play Install Referrer | n/a on iOS (`parseStraitLink` / `parseStraitClick` are ported for parity) |
 | B8 iOS deferred `POST /v1/match` with device fields + `openId`, `at` | ✓ |
 | B9 one event type, replay, start signal | ✓ |
@@ -470,6 +488,7 @@ A `LinkStart` with the same `id` fires first, before any network call.
 | B11 JSON via `JSONSerialization` | ✓ |
 | B12 `splitUrl` without `URLComponents` | ✓ |
 | B13 `trackEvent`, `reportFingerprint`, `compareFingerprint` | ✓ |
+| B13a `trackEvent(eventId:)` (else `newEventId`); offline / 429 / 5xx events saved in `strait.pendingOpens` and flushed to `/v1/event` | ✓ |
 | B14 every open reported once; offline reports queued and retried | ✓ (`pendingOpenReports`, `flushOpenReports`) |
 | B15 conversion events carry the tap id of the last attributed open (7 days; `clickId:` overrides) | ✓ (`strait.lastTap`) |
 | B16 every attributed open supplies the tap id (`/v1/resolve` and `/v1/match` reply `clickId`, `replyClickId`) | ✓ |
@@ -477,7 +496,7 @@ A `LinkStart` with the same `id` fires first, before any network call.
 | B18 reported/queued URLs stripped to host + path (+ `utm_source`) via `reportUrl`; expired remembered taps deleted (`staleTap`) | ✓ |
 | B19 paste handoff: chosen in the dashboard and read from the `/v1/match` reply (`ios.pasteHandoff`) at runtime; `clipboardBoost` deprecated, `detectPatterns` first (no prompt), read only when a URL is likely, `parseHandoffUrl`, `POST /v1/handoff/claim`; `claimHandoff(text:)` + `StraitPasteButton` | ✓ |
 | B22 old Firebase `*.page.link` links: short link → `/v1/resolve` (engine matches the old host + code); long link `/?link=<url>` → the `link` value is the destination, read on the device, no lookup (`pageLinkLongLink`, vectors v8) | ✓ |
-| B23 `doctor()` setup check: one GET of the AASA, then `doctorFindings` (key, endpoint, host, bundle ID; ids and wording from shared-spec ADR 0002) | ✓ (B1–B6, B8–B19, B22, B23) |
+| B23 `doctor()` setup check: one GET of the AASA, then `doctorFindings` (key, endpoint, host, bundle ID; ids and wording from shared-spec ADR 0002) | ✓ (B1–B6a, B8–B19, B22, B23) |
 
 Both `test-vectors.json` (signature) and `conformance-vectors.json` (pure
 helpers) run under `swift test` in CI.

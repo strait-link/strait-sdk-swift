@@ -79,7 +79,8 @@ final class Harness {
     let pasteboard: SpyPasteboard
 
     init(_ engine: FakeEngine, storage: MemoryStorage = MemoryStorage(), linkHosts: [String] = [],
-         pasteboard: SpyPasteboard = SpyPasteboard(), platform: String = "ios", deviceClass: String? = nil) {
+         pasteboard: SpyPasteboard = SpyPasteboard(), platform: String = "ios", deviceClass: String? = nil,
+         installTime: @escaping () -> Double? = { nil }) {
         self.engine = engine
         self.pasteboard = pasteboard
         self.storage = storage
@@ -88,7 +89,7 @@ final class Harness {
         strait = StraitLinks(StraitLinksConfig(
             publishableKey: PK, endpoint: ENDPOINT, linkHosts: linkHosts, storage: storage, transport: engine,
             now: { clock.t }, device: { device }, platform: platform, callbackQueue: nil, observeLifecycle: false,
-            pasteboard: pasteboard, deviceClass: deviceClass
+            pasteboard: pasteboard, deviceClass: deviceClass, installTime: installTime
         ))
         strait.onLink { [unowned self] in self.events.append($0) }
     }
@@ -1399,7 +1400,7 @@ final class DeferredMethodChoiceTests: XCTestCase {
         let engine = FakeEngine(["/v1/match": reply(matched: false, device: true, paste: false), "/v1/handoff/claim": claimed])
         let on = StraitLinks(StraitLinksConfig(
             publishableKey: PK, endpoint: ENDPOINT, storage: MemoryStorage(), transport: engine, device: { device },
-            callbackQueue: nil, observeLifecycle: false, clipboardBoost: true, pasteboard: spy
+            callbackQueue: nil, observeLifecycle: false, clipboardBoost: true, pasteboard: spy, installTime: { nil }
         ))
         on.start(initialURL: nil)
         XCTAssertEqual(spy.touched, 0)
@@ -1408,7 +1409,7 @@ final class DeferredMethodChoiceTests: XCTestCase {
         let engine2 = FakeEngine(["/v1/match": reply(matched: false, device: false, paste: true), "/v1/handoff/claim": claimed])
         let off = StraitLinks(StraitLinksConfig(
             publishableKey: PK, endpoint: ENDPOINT, storage: MemoryStorage(), transport: engine2, device: { device },
-            callbackQueue: nil, observeLifecycle: false, clipboardBoost: false, pasteboard: spy2
+            callbackQueue: nil, observeLifecycle: false, clipboardBoost: false, pasteboard: spy2, installTime: { nil }
         ))
         off.start(initialURL: nil)
         XCTAssertEqual(spy2.readCalls, 1)
@@ -1423,7 +1424,7 @@ final class DeferredMethodChoiceTests: XCTestCase {
             let engine = FakeEngine(["/v1/match": reply(matched: false, device: true, paste: paste), "/v1/handoff/claim": claimed])
             StraitLinks(StraitLinksConfig(
                 publishableKey: PK, endpoint: ENDPOINT, storage: storage, transport: engine, device: { device },
-                callbackQueue: nil, observeLifecycle: false, pasteboard: spy
+                callbackQueue: nil, observeLifecycle: false, pasteboard: spy, installTime: { nil }
             )).start(initialURL: nil)
         }
         XCTAssertEqual(spy1.touched, 0)
