@@ -211,6 +211,9 @@ strait.trackEvent("purchase", value: 49.99, currency: "USD", linkId: event.linkI
 // counts twice. Left out, the SDK makes one. An event that can't be sent (offline,
 // server busy) is kept with the saved open reports and sent later, for up to 7 days;
 // `ok` is then false (contract B13a). Refunds are not supported yet.
+// Revenue you must trust (billing, payouts) belongs on your server with the secret
+// key: the app's publishable key is public, so anyone who can guess an order id could
+// send it first.
 // The event carries the tap id of the last attributed link open for 7 days, so
 // revenue lands on that tap's channel / A/B variant (contracts B15/B16): a
 // browser hand-off, or the engine's reply to a Universal Link or a deferred
