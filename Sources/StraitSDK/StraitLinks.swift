@@ -370,8 +370,8 @@ public final class StraitLinks {
     /// Opt-out switch for consent flows (default on, kept in `storage` across launches). Off: no
     /// open reports, no events, no deferred or clipboard matching, nothing remembered; reports saved
     /// earlier and the remembered tap are deleted. A link that carries its own destination still
-    /// reaches `onLink`; a short link needs a lookup that counts the tap, so it comes back
-    /// `reason: "disabled"`. Back on: sending resumes, and a first-launch check skipped while off
+    /// reaches `onLink`; a short link is looked up through /v1/lookup, which records nothing (no tap,
+    /// no open, no tap id), so it still routes (`reason: "disabled"` only if that lookup fails). Back on: sending resumes, and a first-launch check skipped while off
     /// runs now. `completion` runs on the callback queue when that work is done.
     public func setEnabled(_ enabled: Bool, completion: (() -> Void)? = nil) {
         config.storage.setItem(Self.enabledKey, enabled ? "1" : "0")
@@ -704,8 +704,15 @@ public final class StraitLinks {
             }
             done(route, true, nil, Destination(url: url, path: path, params: params), nil)
         case .shortLink where !on:
-            // Opted out: the lookup would count the tap, so a short link can't be resolved.
-            done(.appLink, false, "disabled", .none, nil)
+            // Opted out: ask only where the link goes (/v1/lookup records nothing). Key + host + path only;
+            // no open report, no tap kept, no retry. An engine without it (404) or no network: "disabled".
+            let body: [String: Any] = ["publishableKey": config.publishableKey, "url": reportUrl(raw)]
+            call("POST", "/v1/lookup", body, lookupOnly: true) { [self] r in
+                guard case let .success(res) = r, res.ok else { return done(.appLink, false, "disabled", .none, nil) }
+                let matched = (res.json["matched"] as? Bool) == true
+                let reason = matched ? nil : (res.json["reason"] as? String) ?? "disabled"
+                done(.appLink, matched, reason, matched ? destination(res.json["longUrl"] as? String) : .none, res.json["linkId"] as? String)
+            }
         case .shortLink:
             // The lookup is also the open report (openId); the engine says whether
             // it recorded it, and anything short of that is retried via /v1/open.
@@ -970,9 +977,10 @@ public final class StraitLinks {
     }
 
     /// JSON over the transport (bodies built with JSONSerialization — B11).
-    /// Every engine call goes through here: while opted out nothing leaves the device.
-    func call(_ method: String, _ path: String, _ body: [String: Any]?, completion: @escaping (Result<Reply, Error>) -> Void) {
-        guard isEnabled else { return completion(.failure(StraitLinksError.disabled)) }
+    /// Every engine call goes through here: while opted out nothing leaves the device, except
+    /// `lookupOnly` (/v1/lookup: where a short link goes, recorded nowhere, engine ADR 0083).
+    func call(_ method: String, _ path: String, _ body: [String: Any]?, lookupOnly: Bool = false, completion: @escaping (Result<Reply, Error>) -> Void) {
+        guard lookupOnly || isEnabled else { return completion(.failure(StraitLinksError.disabled)) }
         guard let url = URL(string: base + path) else { return completion(.failure(StraitLinksError.badEndpoint)) }
         var req = URLRequest(url: url)
         req.httpMethod = method
