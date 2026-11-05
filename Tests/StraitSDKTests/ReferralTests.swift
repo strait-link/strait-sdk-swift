@@ -55,4 +55,34 @@ final class ReferralTests: XCTestCase {
         let old = Data(#"{"matched":false,"matchMethod":"none"}"#.utf8)
         XCTAssertNil(try JSONDecoder().decode(MatchResult.self, from: old).referralCode)
     }
+
+    // Engine ADR 0081: a matched deferred reply says how it matched and how sure it is.
+    func testSignalMatchCarriesTheMatch() throws {
+        let h = Harness(FakeEngine(["/v1/match": with(["matchMethod": "exact_ext", "match": ["method": "fingerprint", "confidence": "probable"]])]))
+        h.start()
+        XCTAssertEqual(try XCTUnwrap(h.events.last).match, MatchInfo(method: "fingerprint", confidence: "probable"))
+    }
+
+    func testClipboardClaimAndPasteButtonCarryTheMatch() throws {
+        let claim = with(["matchMethod": "clipboard", "match": ["method": "clipboard", "confidence": "exact"]])
+        let h = Harness(FakeEngine(["/v1/match": ["matched": false, "ios": ["deviceMatching": true, "pasteHandoff": true]], "/v1/handoff/claim": claim]),
+                        pasteboard: SpyPasteboard(probableURL: true, text: handoff))
+        h.start()
+        XCTAssertEqual(h.events.last?.match, MatchInfo(method: "clipboard", confidence: "exact"))
+        var got: LinkEvent?
+        h.strait.claimHandoff(text: handoff) { got = $0 }
+        XCTAssertEqual(got?.match, MatchInfo(method: "clipboard", confidence: "exact"))
+    }
+
+    func testNoMatchFieldMalformedOrNoMatchGivesNil() throws {
+        let replies: [[String: Any]] = [
+            matchedReply, with(["match": NSNull()]), with(["match": "exact"]), with(["match": ["method": 1]]),
+            ["matched": false, "match": ["method": "fingerprint", "confidence": "probable"]],
+        ]
+        for reply in replies {
+            let h = Harness(FakeEngine(["/v1/match": reply]))
+            h.start()
+            XCTAssertNil(try XCTUnwrap(h.events.last).match, "\(reply)")
+        }
+    }
 }

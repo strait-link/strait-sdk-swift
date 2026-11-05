@@ -330,6 +330,14 @@ func replyReferralCode(_ reply: Any?) -> String? {
     return r
 }
 
+/// The `match` of a matched deferred reply, as sent, when it has a string
+/// method and confidence; else nil (engine ADR 0081).
+func replyMatch(_ reply: Any?) -> MatchInfo? {
+    guard let m = reply as? [String: Any], let method = m["method"] as? String,
+          let confidence = m["confidence"] as? String else { return nil }
+    return MatchInfo(method: method, confidence: confidence)
+}
+
 /// Whether a failed report should be kept for retry: no answer (nil), 429 or 5xx.
 func shouldRetryReport(_ status: Int?) -> Bool {
     guard let status = status else { return true }

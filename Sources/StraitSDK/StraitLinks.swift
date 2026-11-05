@@ -39,6 +39,18 @@ public struct LinkEvent: Equatable {
     /// one. Who invited this install; reward them from your server (the
     /// `referral.converted` webhook). Referrals are a preview (contract B21).
     public internal(set) var referralCode: String? = nil
+    /// Deferred links only: how the engine matched and how sure it is, e.g.
+    /// method "fingerprint", confidence "probable". nil when not
+    /// matched or the engine doesn't send it (engine ADR 0081).
+    public internal(set) var match: MatchInfo? = nil
+}
+
+/// How the engine matched a deferred link and how sure it is (engine ADR 0081).
+/// `method`: install_referrer · clipboard · fingerprint · test.
+/// `confidence`: exact · high · probable (clipboard is exact).
+public struct MatchInfo: Equatable {
+    public let method: String
+    public let confidence: String
 }
 
 /// Fired the moment a link arrives, before it's resolved (resolving can take a
@@ -561,7 +573,7 @@ public final class StraitLinks {
             completion(.matched(LinkEvent(
                 id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: true, reason: nil,
                 rawUrl: nil, url: dest.url, path: dest.path, params: dest.params, linkId: res.json["linkId"] as? String,
-                ms: config.now() - t0, at: t0, referralCode: replyReferralCode(res.json["referralCode"])
+                ms: config.now() - t0, at: t0, referralCode: replyReferralCode(res.json["referralCode"]), match: replyMatch(res.json["match"])
             )))
         }
     }
@@ -733,7 +745,7 @@ public final class StraitLinks {
         }
         call("POST", "/v1/match", body) { [self] r in
             // No answer, 429 or 5xx = try again next launch (reported as 'network').
-            var matched = false, reason: String? = "network", dest = Destination.none, linkId: String?, referralCode: String?
+            var matched = false, reason: String? = "network", dest = Destination.none, linkId: String?, referralCode: String?, match: MatchInfo?
             var pasteHandoff = false
             if case let .success(res) = r, !shouldRetryReport(res.status) {
                 pasteHandoff = replyPasteHandoff(res.json)
@@ -743,12 +755,13 @@ public final class StraitLinks {
                 dest = matched ? destination(res.json["longUrl"] as? String) : .none
                 linkId = res.json["linkId"] as? String
                 referralCode = matched ? replyReferralCode(res.json["referralCode"]) : nil
+                match = matched ? replyMatch(res.json["match"]) : nil
                 if record && matched { noteTap(replyClickId(res.json["clickId"]), at: t0) }
             }
             completion(LinkEvent(
                 id: id, kind: .deferred, route: .fingerprint, appState: .closed, matched: matched, reason: reason,
                 rawUrl: nil, url: dest.url, path: dest.path, params: dest.params, linkId: linkId,
-                ms: config.now() - t0, at: t0, referralCode: referralCode
+                ms: config.now() - t0, at: t0, referralCode: referralCode, match: match
             ), pasteHandoff)
         }
     }

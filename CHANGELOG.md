@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- New: a matched deferred `LinkEvent` has `match: MatchInfo?` (`method`, `confidence`), how the engine
+  matched (`fingerprint`, `clipboard`, `test`, ...) and how sure it is (`exact`, `high`, `probable`); nil when
+  not matched or the engine doesn't send it (engine ADR 0081). New `struct MatchInfo`.
+
 ## 0.10.0 (5 Nov 2026)
 
 - Fix: reinstalls from a link are no longer lost. A phone restored from an iCloud or Finder backup
