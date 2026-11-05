@@ -18,9 +18,12 @@ public struct StraitConfig {
     /// key (`st_live_…`) here.
     public let publishableKey: String
     public let endpoint: String
-    public init(publishableKey: String, endpoint: String) {
+    /// Sent as `appVersion` with the match (see `StraitLinksConfig.appVersion`). Default: `currentAppVersion()`.
+    public let appVersion: String?
+    public init(publishableKey: String, endpoint: String, appVersion: String? = currentAppVersion()) {
         self.publishableKey = publishableKey
         self.endpoint = endpoint
+        self.appVersion = appVersion
     }
 }
 
@@ -47,6 +50,7 @@ public enum Strait {
         var body = device.json
         body["publishableKey"] = config.publishableKey
         body["platform"] = "ios"
+        addVersions(&body, appVersion: config.appVersion)
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         do {
@@ -108,6 +112,27 @@ public func currentDeviceClass() -> String? {
     #else
     return nil
     #endif
+}
+
+/// The host app's version (`CFBundleShortVersionString` in its Info.plist), or nil. The default
+/// `StraitLinksConfig.appVersion`.
+public func currentAppVersion() -> String? { appVersion(info: Bundle.main.infoDictionary) }
+
+func appVersion(info: [String: Any]?) -> String? { info?["CFBundleShortVersionString"] as? String }
+
+/// A version as the engine takes it (1-64 printable ASCII): trimmed and capped at 64 characters; nil
+/// when empty or holding anything else (the engine would drop it anyway).
+func wireVersion(_ v: String?) -> String? {
+    guard let t = v?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty,
+          t.unicodeScalars.allSatisfy({ (0x20...0x7E).contains($0.value) }) else { return nil }
+    return String(t.prefix(64))
+}
+
+/// td2-23: `appVersion` + `sdkVersion` on a body that records an app open or install (not /v1/lookup or
+/// /v1/event), so support can tell which app and SDK version a customer runs.
+func addVersions(_ body: inout [String: Any], appVersion: String?) {
+    if let v = wireVersion(appVersion) { body["appVersion"] = v }
+    body["sdkVersion"] = StraitLinks.sdkVersion
 }
 
 /// "iPad" -> tablet, "iPhone" / "iPod touch" -> phone; an iOS app running on a Mac -> nil.

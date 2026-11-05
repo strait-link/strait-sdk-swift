@@ -87,7 +87,7 @@ final class Harness {
 
     init(_ engine: FakeEngine, storage: MemoryStorage = MemoryStorage(), linkHosts: [String] = [],
          pasteboard: SpyPasteboard = SpyPasteboard(), platform: String = "ios", deviceClass: String? = nil,
-         installTime: @escaping () -> Double? = { nil }) {
+         installTime: @escaping () -> Double? = { nil }, appVersion: String? = nil) {
         self.engine = engine
         self.pasteboard = pasteboard
         self.storage = storage
@@ -96,7 +96,7 @@ final class Harness {
         strait = StraitLinks(StraitLinksConfig(
             publishableKey: PK, endpoint: ENDPOINT, linkHosts: linkHosts, storage: storage, transport: engine,
             now: { clock.t }, device: { device }, platform: platform, callbackQueue: nil, observeLifecycle: false,
-            pasteboard: pasteboard, deviceClass: deviceClass, installTime: installTime
+            pasteboard: pasteboard, deviceClass: deviceClass, installTime: installTime, appVersion: appVersion
         ))
         strait.onLink { [unowned self] in self.events.append($0) }
     }

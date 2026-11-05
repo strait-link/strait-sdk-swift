@@ -12,7 +12,9 @@
       whether to use iPhone device matching (off for new workspaces).
     * Other data: screen size, preferred language, time zone and iOS version, sent
       once on first launch for the same short-lived match.
-    * Product interaction: link opens reported to the app owner's Strait workspace.
+    * Product interaction: link opens reported to the app owner's Strait workspace,
+      each with the app's version (CFBundleShortVersionString) and this SDK's version,
+      for support. Reading the app's own Info.plist is not a required-reason API.
   - Paste handoff (off by default): only when the app owner turns it on in
     their Strait dashboard (read from Strait's server on first launch), the SDK
     checks the clipboard on first launch and sends only a Strait handoff token
