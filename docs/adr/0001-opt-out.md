@@ -56,3 +56,10 @@ opted-out tap does. A resolve reply that lands after the switch went off still r
 on; the engine already has it), but its tap id is no longer remembered: `noteTap` checks the switch under the
 tap lock, as Android does. The default `URLSession` User-Agent (`<App>/<build> CFNetwork/... Darwin/...`)
 carries no device model, so the Android finding F1 does not apply here.
+
+## Update 5 Nov 2026: follow-up F5, the legacy `Strait.resolveDeferredLink`
+The older one-call API never read the switch: an opted-out app that still called it posted `/v1/match`, which
+records an install. It now takes `storage:` with the same default as `StraitLinks` (`UserDefaultsStorage()`),
+so an app on the defaults is covered with no code change; while `strait.enabled` is `"0"` it returns `.none`
+with no call. Same fix as React Native (ADR 0002) and Flutter, where the default store is in memory and the
+app passes `storage`.

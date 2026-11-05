@@ -28,10 +28,15 @@ public enum Strait {
     /// Call once on first launch. Asks Strait whether this device recently
     /// clicked a link, and returns the deferred destination. Never throws —
     /// returns `.none` on any error. The server adds the observed IP.
+    /// `storage`: the one `StraitLinks` uses (same default), so its opt-out switch
+    /// (`setEnabled(false)`, kept as `strait.enabled`) is honoured: while off this
+    /// sends nothing (no install) and returns `.none`.
     public static func resolveDeferredLink(
         _ config: StraitConfig,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        storage: StraitStorage = UserDefaultsStorage()
     ) async -> MatchResult {
+        guard storage.getItem(StraitLinks.enabledKey) != "0" else { return .none } // opted out (ADR 0001)
         let device = collectDevice()
         let base = config.endpoint.hasSuffix("/") ? String(config.endpoint.dropLast()) : config.endpoint
         guard let url = URL(string: "\(base)/v1/match") else { return .none }

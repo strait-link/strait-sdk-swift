@@ -481,6 +481,7 @@ A `LinkStart` with the same `id` fires first, before any network call.
 
 If your app asks for consent first (for example under India's DPDP Act or a GDPR consent flow in the EU), call `strait.setEnabled(false)` until the person agrees: Strait then sends no open reports or events, does no install matching, and deletes reports waiting on the device. The choice is kept across launches; `setEnabled(true)` turns it back on (default: on) and `isEnabled` reads it.
 Links that carry their own destination still open your screens. A Strait short link is looked up through the engine's `/v1/lookup`, which records nothing (no tap, no open, no tap id), so it still opens the right screen; only if that lookup fails (offline) does it come back `matched: false, reason: "disabled"`. Whether you need consent, and for what, is a question for your own legal advice.
+The legacy `Strait.resolveDeferredLink` honours the same switch: it reads it from the same storage (default `UserDefaults.standard`; pass `storage:` if you give `StraitLinks` another one), and while off it sends nothing (no install) and returns `.none`.
 
 ## Behaviours (shared-spec/SDK-CONTRACT.md)
 
