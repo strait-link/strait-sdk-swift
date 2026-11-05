@@ -355,7 +355,9 @@ public final class StraitLinks {
     /// The once-per-install check; marked done only once the engine answered (offline → next launch).
     private func firstCheck(_ then: @escaping () -> Void) {
         runDeferred(record: true) { [self] e in
-            if e.reason != "network" { config.storage.setItem(Self.deferredFlag, "1") }
+            // Switched off meanwhile: runs when back on.
+            if e.reason == "disabled" { withLock { deferredDue = true } }
+            else if e.reason != "network" { config.storage.setItem(Self.deferredFlag, "1") }
             then()
         }
     }
