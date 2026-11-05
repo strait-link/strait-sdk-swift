@@ -246,6 +246,8 @@ public struct StraitLinksConfig {
 
 enum StraitLinksError: Error {
     case badEndpoint, badBody
+    /// The app turned Strait off (`setEnabled(false)`): nothing is sent.
+    case disabled
 }
 
 // MARK: - Client
@@ -262,6 +264,8 @@ public final class StraitLinks {
     public static let tapKey = "strait.lastTap"
     /// The app's install time stored next to the flag (contract B6a), decimal epoch ms.
     public static let installTimeKey = "strait.installTime"
+    /// The opt-out switch (`setEnabled`): "0" = off; absent = on.
+    public static let enabledKey = "strait.enabled"
 
     let config: StraitLinksConfig
     let base: String
@@ -283,6 +287,8 @@ public final class StraitLinks {
     private var installSettings: InstallSettings?
     /// A direct link arrived in this launch (B6: the first-launch check then stays quiet).
     private var directArrived = false
+    /// The first-launch check was skipped because the SDK was off: `setEnabled(true)` runs it. Guarded by `lock`.
+    private var deferredDue = false
     /// C1: 429/5xx answers in a row to /v1/open and /v1/event, and the time (ms) before which
     /// the saved queue is not sent. In memory only; guarded by `lock`.
     private var failures = 0
@@ -335,15 +341,55 @@ public final class StraitLinks {
             // deferred check, but this open still counts as the install's first.
             if firstLaunch { config.storage.setItem(Self.deferredFlag, "1") }
             handleUrl(initial.absoluteString, appState: .closed, firstLaunch: firstLaunch) { _ in finish() }
+        } else if firstLaunch && !isEnabled {
+            // Opted out: not marked done, runs when switched back on.
+            withLock { deferredDue = true }
+            finish()
         } else if firstLaunch {
-            // Marked done only once the engine answered: offline → next launch.
-            runDeferred(record: true) { [self] e in
-                if e.reason != "network" { config.storage.setItem(Self.deferredFlag, "1") }
-                finish()
-            }
+            firstCheck(finish)
         } else {
             finish()
         }
+    }
+
+    /// The once-per-install check; marked done only once the engine answered (offline → next launch).
+    private func firstCheck(_ then: @escaping () -> Void) {
+        runDeferred(record: true) { [self] e in
+            // Switched off meanwhile: runs when back on.
+            if e.reason == "disabled" { withLock { deferredDue = true } }
+            else if e.reason != "network" { config.storage.setItem(Self.deferredFlag, "1") }
+            then()
+        }
+    }
+
+    // MARK: Opt-out
+
+    /// The opt-out switch's current value (see `setEnabled`). Default true.
+    public var isEnabled: Bool { config.storage.getItem(Self.enabledKey) != "0" }
+
+    /// Opt-out switch for consent flows (default on, kept in `storage` across launches). Off: no
+    /// open reports, no events, no deferred or clipboard matching, nothing remembered; reports saved
+    /// earlier and the remembered tap are deleted. A link that carries its own destination still
+    /// reaches `onLink`; a short link needs a lookup that counts the tap, so it comes back
+    /// `reason: "disabled"`. Back on: sending resumes, and a first-launch check skipped while off
+    /// runs now. `completion` runs on the callback queue when that work is done.
+    public func setEnabled(_ enabled: Bool, completion: (() -> Void)? = nil) {
+        config.storage.setItem(Self.enabledKey, enabled ? "1" : "0")
+        guard enabled else {
+            // Opting out also deletes what was saved to send later.
+            locked(tapLock) { config.storage.setItem(Self.tapKey, "") }
+            return serial { [self] done in
+                writeQueue([])
+                done()
+                deliver { completion?() }
+            }
+        }
+        let finish = { [self] in flush { [self] in deliver { completion?() } } }
+        let due: Bool = withLock {
+            defer { deferredDue = false }
+            return deferredDue
+        }
+        if due { firstCheck(finish) } else { finish() }
     }
 
     /// A link delivered while the app is running: Universal Link
@@ -484,6 +530,7 @@ public final class StraitLinks {
         eventId: String? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
+        guard isEnabled else { return deliver { completion?(false) } }
         let at = config.now()
         let stored: String? = locked(tapLock) { config.storage.getItem(Self.tapKey) }
         if staleTap(stored, now: at) { dropStaleTap(now: at) }
@@ -520,6 +567,13 @@ public final class StraitLinks {
             let e = emit(LinkEvent(
                 id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: false, reason: "not_handoff",
                 rawUrl: nil, url: nil, path: nil, params: nil, linkId: nil, ms: config.now() - t0, at: t0
+            ))
+            return deliver { completion?(e) }
+        }
+        guard isEnabled else {
+            let e = emit(LinkEvent(
+                id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: false, reason: "disabled",
+                rawUrl: nil, url: nil, path: nil, params: nil, linkId: nil, ms: 0, at: t0
             ))
             return deliver { completion?(e) }
         }
@@ -625,6 +679,7 @@ public final class StraitLinks {
         let t0 = config.now()
         let id = newOpenId(t0)
         let platform = config.platform
+        let on = isEnabled
         announce(LinkStart(id: id, kind: .direct, appState: appState, rawUrl: raw, at: t0))
         let done = { [self] (route: LinkRoute, matched: Bool, reason: String?, dest: Destination, linkId: String?) in
             let e = emit(LinkEvent(
@@ -639,13 +694,18 @@ public final class StraitLinks {
         }
         switch c {
         case let .destination(route, url, path, params, clickId):
-            if let clickId = clickId { noteTap(clickId, at: t0) }
-            // Navigation never waits for the report.
-            report(OpenReport(
-                openId: id, kind: .direct, route: route, appState: appState, platform: platform, url: reportUrl(url),
-                clickId: clickId, linkId: nil, matched: true, reason: nil, firstLaunch: firstLaunch, at: t0
-            ))
+            // Navigation never waits for the report (none while opted out).
+            if on {
+                if let clickId = clickId { noteTap(clickId, at: t0) }
+                report(OpenReport(
+                    openId: id, kind: .direct, route: route, appState: appState, platform: platform, url: reportUrl(url),
+                    clickId: clickId, linkId: nil, matched: true, reason: nil, firstLaunch: firstLaunch, at: t0
+                ))
+            }
             done(route, true, nil, Destination(url: url, path: path, params: params), nil)
+        case .shortLink where !on:
+            // Opted out: the lookup would count the tap, so a short link can't be resolved.
+            done(.appLink, false, "disabled", .none, nil)
         case .shortLink:
             // The lookup is also the open report (openId); the engine says whether
             // it recorded it, and anything short of that is retried via /v1/open.
@@ -690,6 +750,12 @@ public final class StraitLinks {
     private func runDeferred(record: Bool, completion: @escaping (LinkEvent) -> Void) {
         let t0 = config.now()
         let id = newOpenId(t0)
+        guard isEnabled else {
+            return completion(LinkEvent(
+                id: id, kind: .deferred, route: .fingerprint, appState: .closed, matched: false, reason: "disabled",
+                rawUrl: nil, url: nil, path: nil, params: nil, linkId: nil, ms: 0, at: t0
+            ))
+        }
         // B6: a link that arrived before or while this once-per-install check ran is
         // what the person wants now. The check's answer (a match, no_match or
         // network) is returned but not delivered: it would pull the app off that
@@ -807,7 +873,7 @@ public final class StraitLinks {
 
     private func enqueue(_ report: QueuedReport) {
         serial { [self] done in
-            writeQueue(pruneOpenQueue(readQueue() + [report], now: config.now()) { Double($0.at) })
+            if isEnabled { writeQueue(pruneOpenQueue(readQueue() + [report], now: config.now()) { Double($0.at) }) }
             done()
         }
     }
@@ -867,7 +933,8 @@ public final class StraitLinks {
         }
         guard start else { return }
         serial { [self] done in
-            let held = withLock { config.now() < holdUntil } // C1: the server asked us to wait
+            // C1: the server asked us to wait; or the app turned Strait off.
+            let held = withLock { config.now() < holdUntil } || !isEnabled
             let queue = held ? [] : pruneOpenQueue(readQueue(), now: config.now()) { Double($0.at) }
             var keep: [QueuedReport] = []
             func next(_ i: Int) {
@@ -903,7 +970,9 @@ public final class StraitLinks {
     }
 
     /// JSON over the transport (bodies built with JSONSerialization — B11).
+    /// Every engine call goes through here: while opted out nothing leaves the device.
     func call(_ method: String, _ path: String, _ body: [String: Any]?, completion: @escaping (Result<Reply, Error>) -> Void) {
+        guard isEnabled else { return completion(.failure(StraitLinksError.disabled)) }
         guard let url = URL(string: base + path) else { return completion(.failure(StraitLinksError.badEndpoint)) }
         var req = URLRequest(url: url)
         req.httpMethod = method
