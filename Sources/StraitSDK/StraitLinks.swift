@@ -663,7 +663,8 @@ public final class StraitLinks {
     /// Remember the tap of an attributed open (B15), or forget the older one
     /// when this newer attributed open has no tap id the SDK knows.
     private func noteTap(_ clickId: String?, at: Double) {
-        locked(tapLock) { config.storage.setItem(Self.tapKey, clickId.map { rememberTap($0, at: at) } ?? "") }
+        // Checked under the lock: a reply that lands after setEnabled(false) keeps no tap.
+        locked(tapLock) { if isEnabled { config.storage.setItem(Self.tapKey, clickId.map { rememberTap($0, at: at) } ?? "") } }
     }
 
     /// B18: delete an expired remembered tap instead of only ignoring it. Re-read
@@ -692,6 +693,17 @@ public final class StraitLinks {
         guard let c = classifyUrl(raw, linkHosts: linkHosts) else {
             return done(.appLink, false, "invalid_url", .none, nil)
         }
+        // Opted out: ask only where the link goes (/v1/lookup records nothing). Key + host + path, no query;
+        // no open report, no tap kept, no retry. An engine without it (404) or no network: "disabled".
+        let lookupOnly = { [self] in
+            let body: [String: Any] = ["publishableKey": config.publishableKey, "url": String(reportUrl(raw).prefix { $0 != "?" })]
+            call("POST", "/v1/lookup", body, lookupOnly: true) { [self] r in
+                guard case let .success(res) = r, res.ok else { return done(.appLink, false, "disabled", .none, nil) }
+                let matched = (res.json["matched"] as? Bool) == true
+                let reason = matched ? nil : (res.json["reason"] as? String) ?? "disabled"
+                done(.appLink, matched, reason, matched ? destination(res.json["longUrl"] as? String) : .none, res.json["linkId"] as? String)
+            }
+        }
         switch c {
         case let .destination(route, url, path, params, clickId):
             // Navigation never waits for the report (none while opted out).
@@ -704,15 +716,7 @@ public final class StraitLinks {
             }
             done(route, true, nil, Destination(url: url, path: path, params: params), nil)
         case .shortLink where !on:
-            // Opted out: ask only where the link goes (/v1/lookup records nothing). Key + host + path, no query;
-            // no open report, no tap kept, no retry. An engine without it (404) or no network: "disabled".
-            let body: [String: Any] = ["publishableKey": config.publishableKey, "url": String(reportUrl(raw).prefix { $0 != "?" })]
-            call("POST", "/v1/lookup", body, lookupOnly: true) { [self] r in
-                guard case let .success(res) = r, res.ok else { return done(.appLink, false, "disabled", .none, nil) }
-                let matched = (res.json["matched"] as? Bool) == true
-                let reason = matched ? nil : (res.json["reason"] as? String) ?? "disabled"
-                done(.appLink, matched, reason, matched ? destination(res.json["longUrl"] as? String) : .none, res.json["linkId"] as? String)
-            }
+            lookupOnly()
         case .shortLink:
             // The lookup is also the open report (openId); the engine says whether
             // it recorded it, and anything short of that is retried via /v1/open.
@@ -729,6 +733,8 @@ public final class StraitLinks {
             if let dc = config.deviceClass { body["deviceClass"] = dc }
             call("POST", "/v1/resolve", body) { [self] r in
                 guard case let .success(res) = r else {
+                    // Switched off while the resolve was out (F4): route the way an opted-out tap does.
+                    if !isEnabled { return lookupOnly() }
                     var failed = base
                     failed.reason = "network"
                     enqueue(.open(failed))

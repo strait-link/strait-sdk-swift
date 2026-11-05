@@ -47,3 +47,12 @@ query string, not even utm_source): no openId, platform, device class or app sta
 with the destination and no `clickId`; nothing is queued, remembered or retried. A failed lookup (offline,
 429, or an engine without it: 404, so it fails closed) comes back `reason: 'disabled'` as before. This is
 the one engine call allowed while off; it bypasses the opt-out gate by name, nothing else does.
+
+## Update 5 Nov 2026: follow-up F4 (`ops/run-1105/sdk-privacy-followups.md`)
+`setEnabled(false)` on another thread while `/v1/resolve` was out made the call fail (at the gate, or the
+network) and the link came back `reason: "network"`, with an open report handed to the queue (dropped by the
+queue's own gate). A failed resolve now re-reads the switch and, when off, routes through `/v1/lookup` as an
+opted-out tap does. A resolve reply that lands after the switch went off still routes (that request left while
+on; the engine already has it), but its tap id is no longer remembered: `noteTap` checks the switch under the
+tap lock, as Android does. The default `URLSession` User-Agent (`<App>/<build> CFNetwork/... Darwin/...`)
+carries no device model, so the Android finding F1 does not apply here.

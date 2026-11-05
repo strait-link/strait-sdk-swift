@@ -87,6 +87,50 @@ final class OptOutTests: XCTestCase {
         }
     }
 
+    /// F4: the switch goes off while /v1/resolve is out and that call fails: route via /v1/lookup, not
+    /// "network", and queue nothing.
+    func testSwitchedOffWhileResolveIsOutAndFailsRoutesThroughLookup() {
+        var routes = engineRoutes
+        routes["/v1/lookup"] = ["matched": true, "longUrl": "https://shop.example/p/42", "linkId": "lnk_42"]
+        let engine = FakeEngine(routes)
+        engine.modes["/v1/resolve"] = .offline
+        let s = MemoryStorage()
+        let h = Harness(engine, storage: s)
+        h.start()
+        engine.onCall["/v1/resolve"] = { h.strait.setEnabled(false) }
+        engine.calls = []
+        h.strait.handle(urlString: "https://links.test/sale")
+        XCTAssertEqual(engine.calls.map(\.path), ["/v1/resolve", "/v1/lookup"])
+        let e = h.events.last
+        XCTAssertEqual(e?.matched, true)
+        XCTAssertNil(e?.reason)
+        XCTAssertEqual(e?.path, "/p/42")
+        var pending = -1
+        h.strait.pendingOpenReports { pending = $0 }
+        XCTAssertEqual(pending, 0)
+        XCTAssertEqual(s.getItem("strait.lastTap") ?? "", "")
+    }
+
+    /// The reply lands after the switch went off: the link routes, but no tap is kept and nothing is queued.
+    func testSwitchedOffWhileResolveIsOutAndAnswersKeepsNoTap() {
+        var routes = engineRoutes
+        routes["/v1/resolve"] = ["matched": true, "longUrl": "https://shop.example/p/42", "linkId": "lnk_42",
+                                 "clickId": "3f2a9c1e-7b4d-4e8a-9f10-2c3d4e5f6a7b"]
+        let engine = FakeEngine(routes)
+        let s = MemoryStorage()
+        let h = Harness(engine, storage: s)
+        h.start()
+        engine.onCall["/v1/resolve"] = { h.strait.setEnabled(false) }
+        engine.calls = []
+        h.strait.handle(urlString: "https://links.test/sale")
+        XCTAssertEqual(h.events.last?.matched, true)
+        XCTAssertEqual(engine.calls.map(\.path), ["/v1/resolve"])
+        var pending = -1
+        h.strait.pendingOpenReports { pending = $0 }
+        XCTAssertEqual(pending, 0)
+        XCTAssertEqual(s.getItem("strait.lastTap") ?? "", "")
+    }
+
     func testPersistsAcrossLaunches() {
         let s = MemoryStorage()
         Harness(FakeEngine(engineRoutes), storage: s).strait.setEnabled(false)

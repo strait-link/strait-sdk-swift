@@ -30,6 +30,8 @@ final class FakeEngine: StraitTransport {
     /// The `Retry-After` header a `.status` answer carries, by path.
     var retryAfter: [String: String] = [:]
     var calls: [Call] = []
+    /// Runs when a call to that path arrives, before it is answered (e.g. the switch flips mid-call).
+    var onCall: [String: () -> Void] = [:]
     private var held: [() -> Void] = []
 
     init(_ routes: [String: [String: Any]] = [:]) { self.routes = routes }
@@ -38,6 +40,7 @@ final class FakeEngine: StraitTransport {
         let url = request.url!
         let body = request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
         calls.append(Call(method: request.httpMethod ?? "GET", path: url.path, query: url.query, body: body))
+        onCall[url.path]?()
         if offline { return completion(.failure(URLError(.notConnectedToInternet))) }
         switch modes[url.path] {
         case .offline?: return completion(.failure(URLError(.notConnectedToInternet)))
