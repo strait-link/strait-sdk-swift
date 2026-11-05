@@ -40,7 +40,7 @@ public struct LinkEvent: Equatable {
     /// `referral.converted` webhook). Referrals are a preview (contract B21).
     public internal(set) var referralCode: String? = nil
     /// Deferred links only: how the engine matched and how sure it is, e.g.
-    /// `MatchInfo(method: "fingerprint", confidence: "probable")`. nil when not
+    /// method "fingerprint", confidence "probable". nil when not
     /// matched or the engine doesn't send it (engine ADR 0081).
     public internal(set) var match: MatchInfo? = nil
 }
