@@ -721,7 +721,8 @@ public final class StraitLinks {
                 if let clickId = clickId { noteTap(clickId, at: t0) }
                 report(OpenReport(
                     openId: id, kind: .direct, route: route, appState: appState, platform: platform, url: reportUrl(url),
-                    clickId: clickId, linkId: nil, matched: true, reason: nil, firstLaunch: firstLaunch, at: t0
+                    clickId: clickId, linkId: nil, matched: true, reason: nil, firstLaunch: firstLaunch, at: t0,
+                    appVersion: config.appVersion
                 ))
             }
             done(route, true, nil, Destination(url: url, path: path, params: params), nil)
@@ -734,7 +735,8 @@ public final class StraitLinks {
             let reported = reportUrl(raw)
             let base = OpenReport(
                 openId: id, kind: .direct, route: .appLink, appState: appState, platform: platform, url: reported,
-                clickId: nil, linkId: nil, matched: false, reason: nil, firstLaunch: firstLaunch, at: t0
+                clickId: nil, linkId: nil, matched: false, reason: nil, firstLaunch: firstLaunch, at: t0,
+                appVersion: config.appVersion
             )
             var body: [String: Any] = [
                 "publishableKey": config.publishableKey, "url": reported, "platform": platform,
@@ -916,8 +918,6 @@ public final class StraitLinks {
         case .open:
             path = "/v1/open"
             if let dc = config.deviceClass { body["deviceClass"] = dc }
-            // Added at send time, so saved reports retried later carry them too (never stored).
-            addVersions(&body, appVersion: config.appVersion)
         case .event:
             path = "/v1/event"
             body["type"] = nil
@@ -1065,10 +1065,15 @@ struct OpenReport: Codable {
     var reason: String?
     var firstLaunch: Bool
     var at: Int64 // whole ms
+    /// The app and SDK versions this open happened in (td2-23), kept with a saved report so a retry after an
+    /// app update still says the old ones. nil in reports saved by an older SDK: they go out without them.
+    var appVersion: String?
+    var sdkVersion: String?
 
     init(
         openId: String, kind: LinkKind, route: LinkRoute, appState: AppStateAtLink, platform: String,
-        url: String?, clickId: String?, linkId: String?, matched: Bool, reason: String?, firstLaunch: Bool, at: Double
+        url: String?, clickId: String?, linkId: String?, matched: Bool, reason: String?, firstLaunch: Bool, at: Double,
+        appVersion: String?
     ) {
         self.openId = openId
         self.kind = kind.rawValue
@@ -1082,6 +1087,8 @@ struct OpenReport: Codable {
         self.reason = reason
         self.firstLaunch = firstLaunch
         self.at = Int64(at)
+        self.appVersion = wireVersion(appVersion)
+        self.sdkVersion = StraitLinks.sdkVersion
     }
 }
 

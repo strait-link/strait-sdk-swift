@@ -5,7 +5,9 @@
 - New: every request that records an app open or install (`/v1/open`, `/v1/resolve`, `/v1/match`,
   `/v1/handoff/claim`, saved reports sent later included) now also sends `appVersion`, your app's version
   (`CFBundleShortVersionString`), and `sdkVersion`, this SDK's version, so support can see which version a
-  customer runs when links stop working. Override with `StraitLinksConfig.appVersion`. Trimmed and capped
+  customer runs when links stop working. A report saved offline keeps the versions it was made with, so
+  one sent after an app update still says the old version. Override with `StraitLinksConfig.appVersion`
+  (or `StraitConfig.appVersion` for the legacy `Strait.resolveDeferredLink`). Trimmed and capped
   at 64 characters; left out when empty or not plain ASCII. Not sent with events, the opt-out
   `/v1/lookup`, or anything while switched off. No privacy manifest change: reading your app's version
   is not a required-reason API. New `StraitLinks.sdkVersion` and `currentAppVersion()`.

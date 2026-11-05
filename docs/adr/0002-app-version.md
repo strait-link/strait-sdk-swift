@@ -20,7 +20,8 @@ Support and the app team debugging a broken release; the founder triaging an SDK
   `StraitLinksConfig.appVersion` (default `currentAppVersion()`, injectable like `deviceClass`).
 - `sdkVersion` = `StraitLinks.sdkVersion`, pinned by a test to the newest `## X.Y.Z` in CHANGELOG.md (the
   release workflow checks tags against the changelog, so a forgotten bump fails the release's tests).
-- Sent on `/v1/open` (added at send time, so saved reports retried later carry them), `/v1/resolve`,
+- Sent on `/v1/open` (stamped on the report when it is made and saved with it, so a retry after an app update
+  still says the version the open happened in; reports saved by an older SDK go out without them), `/v1/resolve`,
   `/v1/match` (the once-per-install check and the legacy `Strait.resolveDeferredLink`) and
   `/v1/handoff/claim`. Not on `/v1/lookup` (opt-out path), `/v1/event`, the debug re-check (`record:false`)
   or the store sheet. Nothing while switched off (the one HTTP helper refuses every call).
@@ -35,4 +36,4 @@ Support and the app team debugging a broken release; the founder triaging an SDK
   manifest comment now says the open reports carry the app and SDK versions.
 
 ## Cost
-Two short strings per recorded open. No new storage on the device.
+Two short strings per recorded open, also kept in saved reports (`strait.pendingOpens`, at most 100 / 7 days).

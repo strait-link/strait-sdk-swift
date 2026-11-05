@@ -55,6 +55,33 @@ final class AppVersionTests: XCTestCase {
         assertVersions(retry.first?.body, "the saved /v1/open retry")
     }
 
+    /// A report saved offline keeps the versions it was made with: sent after an app update, it still says
+    /// the old version (the open happened in that build).
+    func testQueuedOpenKeepsTheVersionItWasMadeWith() {
+        let s = firstLaunchDone()
+        let engine = FakeEngine(routes)
+        engine.modes["/v1/resolve"] = .offline
+        let old = Harness(engine, storage: s, appVersion: "2.4.1")
+        old.start()
+        old.strait.handle(urlString: "https://links.test/sale")
+        let next = Harness(FakeEngine(routes), storage: s, appVersion: "2.5.0") // updated app, same storage
+        next.start()
+        let sent = next.engine.calls(to: "/v1/open")
+        XCTAssertEqual(sent.count, 1)
+        assertVersions(sent.first?.body, "the saved open keeps its own versions")
+    }
+
+    /// A report saved by an older SDK (no version fields) goes out as it is: no guessed versions.
+    func testOpenSavedByAnOlderSdkGoesOutWithoutVersions() {
+        let s = firstLaunchDone()
+        s.setItem(StraitLinks.queueKey, #"[{"openId":"o_1","kind":"direct","route":"app_link","appState":"closed","platform":"ios","matched":true,"firstLaunch":false,"at":1000000}]"#)
+        let h = Harness(FakeEngine(routes), storage: s, appVersion: "2.5.0")
+        h.start()
+        let sent = h.engine.calls(to: "/v1/open")
+        XCTAssertEqual(sent.count, 1)
+        assertNoVersions(sent.first?.body, "an older SDK's saved open")
+    }
+
     func testHandoffClaimSendsBoth() {
         let engine = FakeEngine([
             "/v1/match": ["matched": false, "ios": ["deviceMatching": true, "pasteHandoff": true]],
@@ -151,12 +178,12 @@ final class AppVersionTests: XCTestCase {
         let c = URLSessionConfiguration.ephemeral
         c.protocolClasses = [BodyRecorder.self]
         _ = await Strait.resolveDeferredLink(
-            StraitConfig(publishableKey: "st_pub_test_x", endpoint: "https://acme.strait.link"),
+            StraitConfig(publishableKey: "st_pub_test_x", endpoint: "https://acme.strait.link", appVersion: " 7.1.0 "),
             session: URLSession(configuration: c), storage: MemoryStorage()
         )
         XCTAssertEqual(BodyRecorder.bodies.count, 1)
         XCTAssertEqual(BodyRecorder.bodies.first?["sdkVersion"] as? String, StraitLinks.sdkVersion)
-        XCTAssertEqual(BodyRecorder.bodies.first?["appVersion"] as? String, wireVersion(currentAppVersion()))
+        XCTAssertEqual(BodyRecorder.bodies.first?["appVersion"] as? String, "7.1.0")
     }
 
     private func firstLaunchDone() -> MemoryStorage {

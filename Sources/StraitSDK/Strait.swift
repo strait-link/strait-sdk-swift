@@ -18,9 +18,12 @@ public struct StraitConfig {
     /// key (`st_live_…`) here.
     public let publishableKey: String
     public let endpoint: String
-    public init(publishableKey: String, endpoint: String) {
+    /// Sent as `appVersion` with the match (see `StraitLinksConfig.appVersion`). Default: `currentAppVersion()`.
+    public let appVersion: String?
+    public init(publishableKey: String, endpoint: String, appVersion: String? = currentAppVersion()) {
         self.publishableKey = publishableKey
         self.endpoint = endpoint
+        self.appVersion = appVersion
     }
 }
 
@@ -47,7 +50,7 @@ public enum Strait {
         var body = device.json
         body["publishableKey"] = config.publishableKey
         body["platform"] = "ios"
-        addVersions(&body, appVersion: currentAppVersion())
+        addVersions(&body, appVersion: config.appVersion)
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         do {
