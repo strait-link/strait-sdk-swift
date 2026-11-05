@@ -131,6 +131,30 @@ final class OptOutTests: XCTestCase {
         XCTAssertEqual(s.getItem("strait.lastTap") ?? "", "")
     }
 
+    /// F7: switched off during the first-launch check: no clipboard read (iOS shows a paste prompt).
+    private let pasteOnMiss: [String: Any] = ["matched": false, "matchMethod": "none", "ios": ["deviceMatching": true, "pasteHandoff": true]]
+
+    func testSwitchedOffWhileMatchIsOutLeavesTheClipboardAlone() {
+        let engine = FakeEngine(["/v1/match": pasteOnMiss])
+        let clip = SpyPasteboard(text: "https://links.test/h/AbCdEfGhIjKlMnOpQrStUv")
+        let h = Harness(engine, storage: MemoryStorage(), pasteboard: clip)
+        engine.onCall["/v1/match"] = { h.strait.setEnabled(false) }
+        h.start()
+        XCTAssertEqual(clip.touched, 0, "no paste prompt for an opted-out person")
+        XCTAssertEqual(engine.calls.map(\.path), ["/v1/match"])
+    }
+
+    func testSwitchedOffBetweenTheDetectAndTheReadDoesNotRead() {
+        let engine = FakeEngine(["/v1/match": pasteOnMiss])
+        let clip = SpyPasteboard(text: "https://links.test/h/AbCdEfGhIjKlMnOpQrStUv")
+        let h = Harness(engine, storage: MemoryStorage(), pasteboard: clip)
+        clip.duringDetect = { h.strait.setEnabled(false) }
+        h.start()
+        XCTAssertEqual(clip.detectCalls, 1)
+        XCTAssertEqual(clip.readCalls, 0)
+        XCTAssertEqual(engine.calls.map(\.path), ["/v1/match"])
+    }
+
     func testPersistsAcrossLaunches() {
         let s = MemoryStorage()
         Harness(FakeEngine(engineRoutes), storage: s).strait.setEnabled(false)

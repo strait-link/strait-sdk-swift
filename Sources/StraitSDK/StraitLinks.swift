@@ -800,8 +800,10 @@ public final class StraitLinks {
         // iOS's paste prompt. Nor is it read once a link is here: the result
         // won't be delivered, so the prompt would be for nothing.
         signalMatch(record: record, id: id, t0: t0) { [self] matchEvent, pasteHandoff in
-            guard mayPaste && pasteHandoff && !matchEvent.matched && !quiet() else { return completion(done(matchEvent)) }
-            clipboardToken(skip: quiet) { [self] token in
+            // Nor once the app switched Strait off during the check (F7): no paste prompt for an opted-out person.
+            let skip = { [self] in quiet() || !isEnabled }
+            guard mayPaste && pasteHandoff && !matchEvent.matched && !skip() else { return completion(done(matchEvent)) }
+            clipboardToken(skip: skip) { [self] token in
                 guard let token = token else { return completion(done(matchEvent)) }
                 // Same openId as the match, so the install is counted once.
                 claim(token: token, id: id, t0: t0) { [self] outcome in
