@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- New: `setEnabled(_:completion:)`, an opt-out switch for consent flows (DPDP, GDPR). While off the SDK
+  sends no open reports or events and does no deferred or clipboard matching (store sheet included);
+  reports saved on the device and the remembered tap are deleted. Kept across launches (`strait.enabled`
+  in `storage`); `setEnabled(true)` resumes and runs a first-launch check skipped while off. `isEnabled`
+  reads it. Default on. Links that carry their own destination still reach `onLink`; short links come
+  back `reason: "disabled"` (resolving one counts the tap). docs/adr/0001-opt-out.md.
 - New: a matched deferred `LinkEvent` has `match: MatchInfo?` (`method`, `confidence`), how the engine
   matched (`fingerprint`, `clipboard`, `test`, ...) and how sure it is (`exact`, `high`, `probable`); nil when
   not matched or the engine doesn't send it (engine ADR 0081). New `struct MatchInfo`.
