@@ -165,7 +165,9 @@ Every time a link opens the app, the SDK reports it once (contract B14):
 Reports that can't be sent (offline, server busy) are saved in `storage`
 (`strait.pendingOpens`) and retried on the next `start`, whenever the app
 becomes active, and after any report that gets through, for up to 7 days
-(max 100). The engine de-duplicates by open id (`LinkEvent.id`), so nothing is
+(max 100). When the server is busy (429 or 5xx) the SDK waits before sending
+the saved ones again: 15–30 s, doubling each time in a row up to 1 hour, and at
+least as long as the server's `Retry-After`. The engine de-duplicates by open id (`LinkEvent.id`), so nothing is
 counted twice. Navigation never waits for a report. The first launch of an
 install is marked as such, so dashboards can tell **new users** (installed and
 opened) from **existing users** (already had the app). The deferred check is

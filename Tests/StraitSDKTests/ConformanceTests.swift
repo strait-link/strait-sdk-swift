@@ -43,7 +43,7 @@ final class ConformanceTests: XCTestCase {
     }
 
     func testVersion() {
-        XCTAssertEqual(vectors["version"] as? Int, 10)
+        XCTAssertEqual(vectors["version"] as? Int, 11)
     }
 
     func testEventClickId() throws {
@@ -151,6 +151,22 @@ final class ConformanceTests: XCTestCase {
         for v in try cases("retry") {
             let status = v["status"] as? Int // null → nil (no answer)
             XCTAssertEqual(shouldRetryReport(status), try XCTUnwrap(v["expected"] as? Bool), String(describing: status))
+        }
+    }
+
+    func testRetryDelay() throws {
+        XCTAssertEqual(RETRY_BASE_MS, 30_000)
+        XCTAssertEqual(RETRY_MAX_MS, 3_600_000)
+        for v in try cases("retryDelay") {
+            let name = try XCTUnwrap(v["name"] as? String)
+            XCTAssertEqual(
+                retryDelayMs(
+                    failures: try XCTUnwrap(v["failures"] as? Int, name),
+                    retryAfter: v["retryAfter"] as? String, // null → nil
+                    random: try XCTUnwrap(v["random"] as? Double, name)
+                ),
+                try XCTUnwrap(v["expected"] as? Int, name), name
+            )
         }
     }
 

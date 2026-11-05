@@ -85,9 +85,12 @@ public final class MemoryStorage: StraitStorage {
 public struct StraitHTTPResponse {
     public let status: Int
     public let data: Data
-    public init(status: Int, data: Data) {
+    /// The `Retry-After` response header, if any (the open/event queue waits at least this long, C1).
+    public let retryAfter: String?
+    public init(status: Int, data: Data, retryAfter: String? = nil) {
         self.status = status
         self.data = data
+        self.retryAfter = retryAfter
     }
 }
 
@@ -103,8 +106,10 @@ public struct URLSessionTransport: StraitTransport {
     public func send(_ request: URLRequest, completion: @escaping (Result<StraitHTTPResponse, Error>) -> Void) {
         session.dataTask(with: request) { data, response, error in
             if let error = error { return completion(.failure(error)) }
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            completion(.success(StraitHTTPResponse(status: status, data: data ?? Data())))
+            let http = response as? HTTPURLResponse
+            completion(.success(StraitHTTPResponse(
+                status: http?.statusCode ?? 0, data: data ?? Data(), retryAfter: http?.value(forHTTPHeaderField: "Retry-After")
+            )))
         }.resume()
     }
 }
@@ -266,6 +271,12 @@ public final class StraitLinks {
     private var installSettings: InstallSettings?
     /// A direct link arrived in this launch (B6: the first-launch check then stays quiet).
     private var directArrived = false
+    /// C1: 429/5xx answers in a row to /v1/open and /v1/event, and the time (ms) before which
+    /// the saved queue is not sent. In memory only; guarded by `lock`.
+    private var failures = 0
+    private var holdUntil: Double = 0
+    /// The jitter in `retryDelayMs` (tests fix it).
+    var random: () -> Double = { Double.random(in: 0..<1) }
 
     public init(_ config: StraitLinksConfig) {
         self.config = config
@@ -806,8 +817,22 @@ public final class StraitLinks {
             body["type"] = nil
             body["at"] = nil
         }
-        call("POST", path, body) { r in
-            completion(try? r.get().status)
+        call("POST", path, body) { [self] r in
+            let res = try? r.get()
+            // C1: a 429/5xx holds the saved queue (exponential, jittered, at least the Retry-After);
+            // any other answer ends the hold. No answer adds none.
+            if let res = res {
+                withLock {
+                    if shouldRetryReport(res.status) {
+                        failures += 1
+                        holdUntil = config.now() + Double(retryDelayMs(failures: failures, retryAfter: res.retryAfter, random: random()))
+                    } else {
+                        failures = 0
+                        holdUntil = 0
+                    }
+                }
+            }
+            completion(res?.status)
         }
     }
 
@@ -829,11 +854,12 @@ public final class StraitLinks {
         }
         guard start else { return }
         serial { [self] done in
-            let queue = pruneOpenQueue(readQueue(), now: config.now()) { Double($0.at) }
+            let held = withLock { config.now() < holdUntil } // C1: the server asked us to wait
+            let queue = held ? [] : pruneOpenQueue(readQueue(), now: config.now()) { Double($0.at) }
             var keep: [QueuedReport] = []
             func next(_ i: Int) {
                 guard i < queue.count else {
-                    writeQueue(keep)
+                    if !held { writeQueue(keep) }
                     let waiters: [() -> Void] = withLock {
                         let w = flushWaiters ?? []
                         flushWaiters = nil
@@ -844,10 +870,9 @@ public final class StraitLinks {
                     return
                 }
                 sendReport(queue[i]) { status in
-                    if shouldRetryReport(status) { keep.append(queue[i]) }
-                    // Once one gets no answer at all, keep the rest for later.
-                    if status == nil {
-                        keep.append(contentsOf: queue[(i + 1)...])
+                    // Once one gets no answer, a 429 or a 5xx, keep it and the rest for later.
+                    if shouldRetryReport(status) {
+                        keep.append(contentsOf: queue[i...])
                         return next(queue.count)
                     }
                     next(i + 1)
@@ -861,6 +886,7 @@ public final class StraitLinks {
         let ok: Bool
         let status: Int
         let json: [String: Any]
+        let retryAfter: String?
     }
 
     /// JSON over the transport (bodies built with JSONSerialization — B11).
@@ -879,7 +905,7 @@ public final class StraitLinks {
         config.transport.send(req) { r in
             completion(r.map { res in
                 let json = (try? JSONSerialization.jsonObject(with: res.data)) as? [String: Any] ?? [:]
-                return Reply(ok: (200..<300).contains(res.status), status: res.status, json: json)
+                return Reply(ok: (200..<300).contains(res.status), status: res.status, json: json, retryAfter: res.retryAfter)
             })
         }
     }
