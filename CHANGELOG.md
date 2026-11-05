@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fix (privacy, F7): switching the SDK off during the first-launch check no longer reads the iPhone clipboard
+  (paste handoff, which shows iOS's paste prompt). The switch is checked before the prompt-free "is there a link?"
+  check and again before the read; nothing is claimed.
 - Fix (privacy): the legacy `Strait.resolveDeferredLink` ignored the opt-out switch and still called
   `/v1/match` (one install row per call). It now reads the switch from `storage:` (default
   `UserDefaultsStorage()`, the same as `StraitLinks`); while off it sends nothing and returns `.none`. If
