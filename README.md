@@ -472,6 +472,8 @@ a real iPhone**.
 `fingerprint`, `clipboard`) · `appState` (`closed`, `background`, `foreground`) · `matched` ·
 `reason` (`not_found`, `expired`, `not_live`, `password_protected`, `no_match`, `network`,
 `invalid_url`, `not_handoff`, `handoff_unknown`, `handoff_used`, `handoff_expired`) · `rawUrl` · `url` · `path` · `params` · `linkId` · `ms` · `at` · `referralCode` (deferred links only: the referral code the tap carried, when the engine sends one; referrals are a preview and not switched on yet, contract B21; grant rewards from your server via the `referral.converted` webhook).
+`match` (matched deferred links only): why the install was attributed, e.g. `method: "fingerprint", confidence: "probable"`
+(`clipboard` is `exact`); nil when not matched.
 `id` is the open id Strait records the open under (`o_<base36 ms>_<12 chars>`).
 A `LinkStart` with the same `id` fires first, before any network call.
 
