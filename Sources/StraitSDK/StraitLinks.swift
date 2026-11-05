@@ -182,6 +182,10 @@ public struct StraitLinksConfig {
     /// and runs the once-per-install deferred check again when it changed. Default:
     /// `markerInstallTime()`, which needs no app change.
     public var installTime: () -> Double?
+    /// The app's version (`CFBundleShortVersionString`), sent as `appVersion` with every request that
+    /// records an app open or install, so support can see which app version a customer runs. Trimmed
+    /// and capped at 64 characters; not sent when empty or not printable ASCII. Default: `currentAppVersion()`.
+    public var appVersion: String?
 
     public init(
         publishableKey: String,
@@ -197,7 +201,8 @@ public struct StraitLinksConfig {
         clipboardBoost: Bool = false,
         pasteboard: StraitPasteboard = SystemPasteboard(),
         deviceClass: String? = currentDeviceClass(),
-        installTime: @escaping () -> Double? = { StraitLinksConfig.markerInstallTime() }
+        installTime: @escaping () -> Double? = { StraitLinksConfig.markerInstallTime() },
+        appVersion: String? = currentAppVersion()
     ) {
         self.publishableKey = publishableKey
         self.endpoint = endpoint
@@ -213,6 +218,7 @@ public struct StraitLinksConfig {
         self.pasteboard = pasteboard
         self.deviceClass = deviceClass
         self.installTime = installTime
+        self.appVersion = appVersion
     }
 
     /// The default `installTime` (contract B6a): the creation time, in whole ms, of the marker
@@ -266,6 +272,9 @@ public final class StraitLinks {
     public static let installTimeKey = "strait.installTime"
     /// The opt-out switch (`setEnabled`): "0" = off; absent = on.
     public static let enabledKey = "strait.enabled"
+    /// This SDK's version, sent as `sdkVersion` with every request that records an app open or
+    /// install. Equals the newest `## X.Y.Z` in CHANGELOG.md (a test checks it): bump both together.
+    public static let sdkVersion = "0.10.0"
 
     let config: StraitLinksConfig
     let base: String
@@ -612,9 +621,10 @@ public final class StraitLinks {
     /// POST /v1/handoff/claim. `.unmatched("network")` = no answer, 429 or 5xx.
     /// The matched event is not emitted here; the caller emits it.
     private func claim(token: String, id: String, t0: Double, completion: @escaping (ClaimOutcome) -> Void) {
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "publishableKey": config.publishableKey, "token": token, "platform": "ios", "openId": id, "at": Int64(t0),
         ]
+        addVersions(&body, appVersion: config.appVersion)
         call("POST", "/v1/handoff/claim", body) { [self] r in
             guard case let .success(res) = r, !shouldRetryReport(res.status) else {
                 return completion(.unmatched(reason: "network"))
@@ -731,6 +741,7 @@ public final class StraitLinks {
                 "openId": id, "appState": appState.rawValue, "firstLaunch": firstLaunch, "at": Int64(t0),
             ]
             if let dc = config.deviceClass { body["deviceClass"] = dc }
+            addVersions(&body, appVersion: config.appVersion)
             call("POST", "/v1/resolve", body) { [self] r in
                 guard case let .success(res) = r else {
                     // Switched off while the resolve was out (F4): route the way an opted-out tap does.
@@ -819,6 +830,7 @@ public final class StraitLinks {
         if record {
             body["openId"] = id
             body["at"] = Int64(t0) // whole ms, like the other SDKs
+            addVersions(&body, appVersion: config.appVersion)
         } else {
             body["record"] = false // read only: the engine adds no install, open or webhook
         }
@@ -904,6 +916,8 @@ public final class StraitLinks {
         case .open:
             path = "/v1/open"
             if let dc = config.deviceClass { body["deviceClass"] = dc }
+            // Added at send time, so saved reports retried later carry them too (never stored).
+            addVersions(&body, appVersion: config.appVersion)
         case .event:
             path = "/v1/event"
             body["type"] = nil

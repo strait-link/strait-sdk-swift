@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- New: every request that records an app open or install (`/v1/open`, `/v1/resolve`, `/v1/match`,
+  `/v1/handoff/claim`, saved reports sent later included) now also sends `appVersion`, your app's version
+  (`CFBundleShortVersionString`), and `sdkVersion`, this SDK's version, so support can see which version a
+  customer runs when links stop working. Override with `StraitLinksConfig.appVersion`. Trimmed and capped
+  at 64 characters; left out when empty or not plain ASCII. Not sent with events, the opt-out
+  `/v1/lookup`, or anything while switched off. No privacy manifest change: reading your app's version
+  is not a required-reason API. New `StraitLinks.sdkVersion` and `currentAppVersion()`.
 - Fix (privacy): the legacy `Strait.resolveDeferredLink` ignored the opt-out switch and still called
   `/v1/match` (one install row per call). It now reads the switch from `storage:` (default
   `UserDefaultsStorage()`, the same as `StraitLinks`); while off it sends nothing and returns `.none`. If

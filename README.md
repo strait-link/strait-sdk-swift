@@ -162,6 +162,8 @@ Every time a link opens the app, the SDK reports it once (contract B14):
 | First open after an App Store install | `/v1/match` | the matched tap |
 | Your own https links | `/v1/open` | the URL's host + path (plus `utm_source`, for the channel); query and fragment never leave the device (B18) |
 
+Each of these reports also carries your app's version (`CFBundleShortVersionString`, override with `StraitLinksConfig.appVersion`) and the SDK's version (`StraitLinks.sdkVersion`), so support can see which version a person runs; events and the opt-out `/v1/lookup` don't.
+
 Reports that can't be sent (offline, server busy) are saved in `storage`
 (`strait.pendingOpens`) and retried on the next `start`, whenever the app
 becomes active, and after any report that gets through, for up to 7 days
