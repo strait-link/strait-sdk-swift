@@ -45,10 +45,10 @@ final class OptOutTests: XCTestCase {
         h.strait.handle(urlString: "https://links.test/sale?utm_source=sms&secret=1")
         h.strait.flushOpenReports()
         XCTAssertEqual(h.engine.calls.map(\.path), ["/v1/lookup"])
-        // Only the key and host + path (+ utm_source) leave the device: no openId, platform, device or app state.
+        // Only the key and host + path leave the device: no query, openId, platform, device or app state.
         let body = h.engine.calls.first?.body ?? [:]
         XCTAssertEqual(Set(body.keys), ["publishableKey", "url"])
-        XCTAssertEqual(body["url"] as? String, "https://links.test/sale?utm_source=sms")
+        XCTAssertEqual(body["url"] as? String, "https://links.test/sale")
         let e = h.events.last
         XCTAssertEqual(e?.matched, true)
         XCTAssertEqual(e?.path, "/p/42")
@@ -57,6 +57,19 @@ final class OptOutTests: XCTestCase {
         h.strait.pendingOpenReports { pending = $0 }
         XCTAssertEqual(pending, 0)
         XCTAssertEqual(s.getItem("strait.lastTap") ?? "", "", "no tap remembered")
+    }
+
+    func testDisabledLookupMissKeepsTheEngineReason() {
+        var routes = engineRoutes
+        routes["/v1/lookup"] = ["matched": false, "reason": "expired"]
+        let h = Harness(FakeEngine(routes), storage: MemoryStorage())
+        h.strait.setEnabled(false)
+        h.start()
+        h.strait.handle(urlString: "https://links.test/old")
+        XCTAssertTrue(h.events.contains { !$0.matched && $0.reason == "expired" })
+        var pending = -1
+        h.strait.pendingOpenReports { pending = $0 }
+        XCTAssertEqual(pending, 0)
     }
 
     func testDisabledLookupFailureIsDisabledAndQueuesNothing() {

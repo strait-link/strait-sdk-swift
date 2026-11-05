@@ -704,9 +704,9 @@ public final class StraitLinks {
             }
             done(route, true, nil, Destination(url: url, path: path, params: params), nil)
         case .shortLink where !on:
-            // Opted out: ask only where the link goes (/v1/lookup records nothing). Key + host + path only;
+            // Opted out: ask only where the link goes (/v1/lookup records nothing). Key + host + path, no query;
             // no open report, no tap kept, no retry. An engine without it (404) or no network: "disabled".
-            let body: [String: Any] = ["publishableKey": config.publishableKey, "url": reportUrl(raw)]
+            let body: [String: Any] = ["publishableKey": config.publishableKey, "url": String(reportUrl(raw).prefix { $0 != "?" })]
             call("POST", "/v1/lookup", body, lookupOnly: true) { [self] r in
                 guard case let .success(res) = r, res.ok else { return done(.appLink, false, "disabled", .none, nil) }
                 let matched = (res.json["matched"] as? Bool) == true
