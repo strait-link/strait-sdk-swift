@@ -85,9 +85,12 @@ public final class MemoryStorage: StraitStorage {
 public struct StraitHTTPResponse {
     public let status: Int
     public let data: Data
-    public init(status: Int, data: Data) {
+    /// The `Retry-After` response header, if any (the open/event queue waits at least this long, C1).
+    public let retryAfter: String?
+    public init(status: Int, data: Data, retryAfter: String? = nil) {
         self.status = status
         self.data = data
+        self.retryAfter = retryAfter
     }
 }
 
@@ -103,8 +106,10 @@ public struct URLSessionTransport: StraitTransport {
     public func send(_ request: URLRequest, completion: @escaping (Result<StraitHTTPResponse, Error>) -> Void) {
         session.dataTask(with: request) { data, response, error in
             if let error = error { return completion(.failure(error)) }
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            completion(.success(StraitHTTPResponse(status: status, data: data ?? Data())))
+            let http = response as? HTTPURLResponse
+            completion(.success(StraitHTTPResponse(
+                status: http?.statusCode ?? 0, data: data ?? Data(), retryAfter: http?.value(forHTTPHeaderField: "Retry-After")
+            )))
         }.resume()
     }
 }
@@ -160,6 +165,11 @@ public struct StraitLinksConfig {
     /// "tablet" on an iPad, "phone" on an iPhone, nil elsewhere. iPadOS Safari sends a Mac
     /// user agent, so only the app can tell the engine it is an iPad (engine ADR 0039).
     public var deviceClass: String?
+    /// The app's install time in epoch ms, or nil when unknown (contract B6a). A phone restored
+    /// from a backup brings back `strait.deferredChecked`; the SDK stores this time next to it
+    /// and runs the once-per-install deferred check again when it changed. Default:
+    /// `markerInstallTime()`, which needs no app change.
+    public var installTime: () -> Double?
 
     public init(
         publishableKey: String,
@@ -174,7 +184,8 @@ public struct StraitLinksConfig {
         observeLifecycle: Bool = true,
         clipboardBoost: Bool = false,
         pasteboard: StraitPasteboard = SystemPasteboard(),
-        deviceClass: String? = currentDeviceClass()
+        deviceClass: String? = currentDeviceClass(),
+        installTime: @escaping () -> Double? = { StraitLinksConfig.markerInstallTime() }
     ) {
         self.publishableKey = publishableKey
         self.endpoint = endpoint
@@ -189,6 +200,35 @@ public struct StraitLinksConfig {
         self.legacyClipboardBoost = clipboardBoost
         self.pasteboard = pasteboard
         self.deviceClass = deviceClass
+        self.installTime = installTime
+    }
+
+    /// The default `installTime` (contract B6a): the creation time, in whole ms, of the marker
+    /// file `Strait/install-time` under `directory` (default: Application Support), created on
+    /// first read in a folder marked `isExcludedFromBackup`. An app update keeps it; a reinstall
+    /// or a phone restored from a backup has no marker, so it gets a new time. iOS has no install
+    /// time API. nil when the file can't be created or read.
+    public static func markerInstallTime(in directory: URL? = nil) -> Double? {
+        let fm = FileManager.default
+        guard let base = directory ?? fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
+        var folder = base.appendingPathComponent("Strait", isDirectory: true)
+        let file = folder.appendingPathComponent("install-time")
+        func created() -> Double? {
+            guard let date = try? file.resourceValues(forKeys: [.creationDateKey]).creationDate else { return nil }
+            return (date.timeIntervalSince1970 * 1000).rounded(.down)
+        }
+        if let t = created() { return t }
+        do {
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try folder.setResourceValues(values)
+            // Never replaces a marker another instance created meanwhile (its time stays).
+            try? Data().write(to: file, options: .withoutOverwriting)
+        } catch {
+            return nil
+        }
+        return created()
     }
 }
 
@@ -208,6 +248,8 @@ public final class StraitLinks {
     /// The tap id of the last attributed link open, sent with conversion
     /// events for 7 days (contract B15): `{"clickId":…,"at":<ms>}`.
     public static let tapKey = "strait.lastTap"
+    /// The app's install time stored next to the flag (contract B6a), decimal epoch ms.
+    public static let installTimeKey = "strait.installTime"
 
     let config: StraitLinksConfig
     let base: String
@@ -229,6 +271,12 @@ public final class StraitLinks {
     private var installSettings: InstallSettings?
     /// A direct link arrived in this launch (B6: the first-launch check then stays quiet).
     private var directArrived = false
+    /// C1: 429/5xx answers in a row to /v1/open and /v1/event, and the time (ms) before which
+    /// the saved queue is not sent. In memory only; guarded by `lock`.
+    private var failures = 0
+    private var holdUntil: Double = 0
+    /// The jitter in `retryDelayMs` (tests fix it).
+    var random: () -> Double = { Double.random(in: 0..<1) }
 
     public init(_ config: StraitLinksConfig) {
         self.config = config
@@ -255,7 +303,17 @@ public final class StraitLinks {
     public func start(initialURL: URL? = nil, completion: (() -> Void)? = nil) {
         if config.observeLifecycle { observeAppLifecycle() }
         dropStaleTap(now: config.now())
-        let firstLaunch = config.storage.getItem(Self.deferredFlag) != "1"
+        // B6a: the install time stored with the flag tells a restored backup of another
+        // install from this one (then the check runs again). Cleared before the time is
+        // written, so an app killed in between still gets its first launch next time.
+        let s = firstLaunchState(
+            flag: config.storage.getItem(Self.deferredFlag),
+            stored: config.storage.getItem(Self.installTimeKey),
+            installTime: config.installTime()
+        )
+        if s.clearFlag { config.storage.setItem(Self.deferredFlag, "") }
+        if let t = s.storeInstallTime { config.storage.setItem(Self.installTimeKey, t) }
+        let firstLaunch = s.firstLaunch
         let finish = { [self] in
             flush(completion: nil)
             deliver { completion?() }
@@ -398,28 +456,34 @@ public final class StraitLinks {
         }
     }
 
-    /// Conversion / revenue event. Completes with true when accepted. Carries
+    /// Conversion / revenue event. Completes with true when accepted now. Carries
     /// the tap id of the last attributed link open (≤7 days, contract B15)
-    /// unless you pass `clickId` yourself.
+    /// unless you pass `clickId` yourself. Pass your order id as `eventId`
+    /// (1-64 of `A-Z a-z 0-9 _ . : -`): the engine stores each eventId once
+    /// (else the SDK makes one). false = not accepted now; when the network or
+    /// the server was the reason, the event is kept and sent later with the
+    /// open reports (contract B13a).
     public func trackEvent(
         _ name: String,
         value: Double? = nil,
         currency: String? = nil,
         linkId: String? = nil,
         clickId: String? = nil,
+        eventId: String? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
-        var body: [String: Any] = ["publishableKey": config.publishableKey, "event": name, "platform": config.platform]
-        if let value = value { body["value"] = value }
-        if let currency = currency { body["currency"] = currency }
-        if let linkId = linkId { body["linkId"] = linkId }
+        let at = config.now()
         let stored: String? = locked(tapLock) { config.storage.getItem(Self.tapKey) }
-        if staleTap(stored, now: config.now()) { dropStaleTap(now: config.now()) }
-        if let tap = eventClickId(stored, now: config.now(), explicit: clickId) {
-            body["clickId"] = tap
-        }
-        call("POST", "/v1/event", body) { [self] r in
-            let ok = (try? r.get().ok) ?? false
+        if staleTap(stored, now: at) { dropStaleTap(now: at) }
+        // B13a: built once (tap id chosen now), with an eventId so a retry is stored once.
+        let event = QueuedEvent(
+            at: Int64(at), event: name, platform: config.platform,
+            eventId: eventId.flatMap { $0.isEmpty ? nil : $0 } ?? newEventId(at),
+            value: value, currency: currency, linkId: linkId, clickId: eventClickId(stored, now: at, explicit: clickId)
+        )
+        sendReport(.event(event)) { [self] status in
+            if shouldRetryReport(status) { enqueue(.event(event)) } else { flush(completion: nil) } // the network works
+            let ok = status.map { (200..<300).contains($0) } ?? false
             deliver { completion?(ok) }
         }
     }
@@ -514,7 +578,7 @@ public final class StraitLinks {
 
     // MARK: Open reports (B14)
 
-    /// Open reports saved while offline, waiting to be sent (debugging).
+    /// Open reports and events saved while offline, waiting to be sent (debugging).
     public func pendingOpenReports(completion: @escaping (Int) -> Void) {
         serial { [self] done in
             let n = readQueue().count
@@ -523,7 +587,7 @@ public final class StraitLinks {
         }
     }
 
-    /// Send saved open reports now (also happens on start and whenever the app becomes active).
+    /// Send saved open reports and events now (also happens on start and whenever the app becomes active).
     public func flushOpenReports(completion: (() -> Void)? = nil) {
         flush { [self] in deliver { completion?() } }
     }
@@ -588,7 +652,7 @@ public final class StraitLinks {
                 guard case let .success(res) = r else {
                     var failed = base
                     failed.reason = "network"
-                    enqueue(failed)
+                    enqueue(.open(failed))
                     return done(.appLink, false, "network", .none, nil)
                 }
                 let json = res.json
@@ -712,46 +776,70 @@ public final class StraitLinks {
         op? { [self] in runNextOp() }
     }
 
-    private func readQueue() -> [OpenReport] {
+    private func readQueue() -> [QueuedReport] {
         guard let raw = config.storage.getItem(Self.queueKey), let data = raw.data(using: .utf8) else { return [] }
         // B18: reports saved by an older SDK may hold a full URL; strip it here
         // so the next write leaves no query or fragment on the device.
-        return ((try? JSONDecoder().decode([OpenReport].self, from: data)) ?? []).map { rep in
-            var r = rep
-            r.url = rep.url.map(reportUrl)
-            return r
+        return ((try? JSONDecoder().decode([QueuedReport].self, from: data)) ?? []).map { entry in
+            guard case var .open(r) = entry else { return entry }
+            r.url = r.url.map(reportUrl)
+            return .open(r)
         }
     }
 
-    private func writeQueue(_ q: [OpenReport]) {
+    private func writeQueue(_ q: [QueuedReport]) {
         guard let data = try? JSONEncoder().encode(q), let raw = String(data: data, encoding: .utf8) else { return }
         config.storage.setItem(Self.queueKey, raw)
     }
 
-    private func enqueue(_ report: OpenReport) {
+    private func enqueue(_ report: QueuedReport) {
         serial { [self] done in
             writeQueue(pruneOpenQueue(readQueue() + [report], now: config.now()) { Double($0.at) })
             done()
         }
     }
 
-    /// POST /v1/open; completes with the HTTP status, or nil when there was no answer.
-    private func sendReport(_ report: OpenReport, completion: @escaping (Int?) -> Void) {
+    /// POST /v1/open (or /v1/event for a saved event); completes with the HTTP
+    /// status, or nil when there was no answer.
+    private func sendReport(_ report: QueuedReport, completion: @escaping (Int?) -> Void) {
         guard let data = try? JSONEncoder().encode(report),
               var body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             return completion(400) // can't happen; never retry a report that can't be built
         }
         body["publishableKey"] = config.publishableKey
-        if let dc = config.deviceClass { body["deviceClass"] = dc }
-        call("POST", "/v1/open", body) { r in
-            completion(try? r.get().status)
+        let path: String
+        switch report {
+        case .open:
+            path = "/v1/open"
+            if let dc = config.deviceClass { body["deviceClass"] = dc }
+        case .event:
+            path = "/v1/event"
+            body["type"] = nil
+            body["at"] = nil
+        }
+        call("POST", path, body) { [self] r in
+            let res = try? r.get()
+            // C1: a 429/5xx holds the saved queue (exponential, jittered, at least the Retry-After);
+            // any other answer ends the hold. No answer adds none.
+            if let res = res {
+                withLock {
+                    if shouldRetryReport(res.status) {
+                        failures += 1
+                        holdUntil = config.now() + Double(retryDelayMs(failures: failures, retryAfter: res.retryAfter, random: random()))
+                    } else {
+                        failures = 0
+                        holdUntil = 0
+                    }
+                }
+            }
+            completion(res?.status)
         }
     }
 
     /// Report an open now; keep it for retry if it doesn't get through.
     private func report(_ rep: OpenReport) {
-        sendReport(rep) { [self] status in
-            if shouldRetryReport(status) { enqueue(rep) } else { flush(completion: nil) } // the network works
+        sendReport(.open(rep)) { [self] status in
+            if shouldRetryReport(status) { enqueue(.open(rep)) } else { flush(completion: nil) } // the network works
         }
     }
 
@@ -766,11 +854,12 @@ public final class StraitLinks {
         }
         guard start else { return }
         serial { [self] done in
-            let queue = pruneOpenQueue(readQueue(), now: config.now()) { Double($0.at) }
-            var keep: [OpenReport] = []
+            let held = withLock { config.now() < holdUntil } // C1: the server asked us to wait
+            let queue = held ? [] : pruneOpenQueue(readQueue(), now: config.now()) { Double($0.at) }
+            var keep: [QueuedReport] = []
             func next(_ i: Int) {
                 guard i < queue.count else {
-                    writeQueue(keep)
+                    if !held { writeQueue(keep) }
                     let waiters: [() -> Void] = withLock {
                         let w = flushWaiters ?? []
                         flushWaiters = nil
@@ -781,10 +870,9 @@ public final class StraitLinks {
                     return
                 }
                 sendReport(queue[i]) { status in
-                    if shouldRetryReport(status) { keep.append(queue[i]) }
-                    // Once one gets no answer at all, keep the rest for later.
-                    if status == nil {
-                        keep.append(contentsOf: queue[(i + 1)...])
+                    // Once one gets no answer, a 429 or a 5xx, keep it and the rest for later.
+                    if shouldRetryReport(status) {
+                        keep.append(contentsOf: queue[i...])
                         return next(queue.count)
                     }
                     next(i + 1)
@@ -798,6 +886,7 @@ public final class StraitLinks {
         let ok: Bool
         let status: Int
         let json: [String: Any]
+        let retryAfter: String?
     }
 
     /// JSON over the transport (bodies built with JSONSerialization — B11).
@@ -816,7 +905,7 @@ public final class StraitLinks {
         config.transport.send(req) { r in
             completion(r.map { res in
                 let json = (try? JSONSerialization.jsonObject(with: res.data)) as? [String: Any] ?? [:]
-                return Reply(ok: (200..<300).contains(res.status), status: res.status, json: json)
+                return Reply(ok: (200..<300).contains(res.status), status: res.status, json: json, retryAfter: res.retryAfter)
             })
         }
     }
@@ -883,6 +972,48 @@ struct OpenReport: Codable {
         self.reason = reason
         self.firstLaunch = firstLaunch
         self.at = Int64(at)
+    }
+}
+
+/// A conversion event saved for retry in `strait.pendingOpens` (contract B13a). Never holds
+/// the publishable key; it is added at send time.
+struct QueuedEvent: Codable {
+    var type = "event"
+    var at: Int64 // whole ms, when the app called trackEvent
+    var event: String
+    var platform: String
+    var eventId: String
+    var value: Double?
+    var currency: String?
+    var linkId: String?
+    var clickId: String?
+}
+
+/// One entry of `strait.pendingOpens`: an open report for /v1/open, or (`"type":"event"`)
+/// an event for /v1/event.
+enum QueuedReport: Codable {
+    case open(OpenReport)
+    case event(QueuedEvent)
+
+    private enum Keys: String, CodingKey { case type }
+
+    init(from decoder: Decoder) throws {
+        let type = try decoder.container(keyedBy: Keys.self).decodeIfPresent(String.self, forKey: .type)
+        self = type == "event" ? .event(try QueuedEvent(from: decoder)) : .open(try OpenReport(from: decoder))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        switch self {
+        case let .open(r): try r.encode(to: encoder)
+        case let .event(e): try e.encode(to: encoder)
+        }
+    }
+
+    var at: Int64 {
+        switch self {
+        case let .open(r): return r.at
+        case let .event(e): return e.at
+        }
     }
 }
 

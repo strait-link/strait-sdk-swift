@@ -27,6 +27,8 @@ final class FakeEngine: StraitTransport {
     var routes: [String: [String: Any]]
     var offline = false
     var modes: [String: Mode] = [:]
+    /// The `Retry-After` header a `.status` answer carries, by path.
+    var retryAfter: [String: String] = [:]
     var calls: [Call] = []
     private var held: [() -> Void] = []
 
@@ -46,7 +48,9 @@ final class FakeEngine: StraitTransport {
             return
         case let .status(code)?:
             let payload = routes[url.path] ?? [:]
-            return completion(.success(StraitHTTPResponse(status: code, data: try! JSONSerialization.data(withJSONObject: payload))))
+            return completion(.success(StraitHTTPResponse(
+                status: code, data: try! JSONSerialization.data(withJSONObject: payload), retryAfter: retryAfter[url.path]
+            )))
         case nil: break
         }
         guard let payload = routes[url.path] else {
@@ -79,7 +83,8 @@ final class Harness {
     let pasteboard: SpyPasteboard
 
     init(_ engine: FakeEngine, storage: MemoryStorage = MemoryStorage(), linkHosts: [String] = [],
-         pasteboard: SpyPasteboard = SpyPasteboard(), platform: String = "ios", deviceClass: String? = nil) {
+         pasteboard: SpyPasteboard = SpyPasteboard(), platform: String = "ios", deviceClass: String? = nil,
+         installTime: @escaping () -> Double? = { nil }) {
         self.engine = engine
         self.pasteboard = pasteboard
         self.storage = storage
@@ -88,7 +93,7 @@ final class Harness {
         strait = StraitLinks(StraitLinksConfig(
             publishableKey: PK, endpoint: ENDPOINT, linkHosts: linkHosts, storage: storage, transport: engine,
             now: { clock.t }, device: { device }, platform: platform, callbackQueue: nil, observeLifecycle: false,
-            pasteboard: pasteboard, deviceClass: deviceClass
+            pasteboard: pasteboard, deviceClass: deviceClass, installTime: installTime
         ))
         strait.onLink { [unowned self] in self.events.append($0) }
     }
@@ -578,6 +583,7 @@ final class FingerprintAndEventTests: XCTestCase {
 /// (B7) is Android-only and has no iOS equivalent.
 private let CLICK = "3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f"
 private let accepted: [String: Any] = ["ok": true, "duplicate": false]
+private let HOUR: Double = 3_600_000
 private let resolvedRecorded: [String: Any] = [
     "matched": true, "longUrl": "https://shop.example/p/42", "linkId": "lnk_42", "slug": "sale", "recorded": true,
 ]
@@ -713,12 +719,111 @@ final class OpenQueueTests: XCTestCase {
         h.strait.handle(urlString: "straitlink://a.b/1")
         XCTAssertEqual(pending(h), 1)
         engine.modes["/v1/open"] = .status(429)
+        h.clock.advance(HOUR) // past the backoff hold (C1)
         var flushed = false
         h.strait.flushOpenReports { flushed = true }
         XCTAssertTrue(flushed)
         XCTAssertEqual(pending(h), 1)
         engine.routes["/v1/open"] = ["error": "bad"]
         engine.modes["/v1/open"] = .status(400)
+        h.clock.advance(HOUR)
+        h.strait.flushOpenReports()
+        XCTAssertEqual(pending(h), 0)
+    }
+
+    // C1: a server under load (429/5xx) is not hammered by every phone's queue.
+    private func queueThree(_ h: Harness) {
+        h.engine.modes["/v1/open"] = .offline
+        for p in 1...3 { h.strait.handle(urlString: "straitlink://a.b/\(p)") }
+        XCTAssertEqual(pending(h), 3)
+        h.engine.calls = []
+    }
+
+    private func opens(_ h: Harness) -> Int { h.engine.calls(to: "/v1/open").count }
+
+    func testFlushStopsAtTheFirst429Or5xxTheRestStaySavedAndUnsent() {
+        let h = Harness(FakeEngine(), storage: returning())
+        h.start()
+        queueThree(h)
+        h.engine.modes["/v1/open"] = .status(503)
+        h.strait.flushOpenReports()
+        XCTAssertEqual(opens(h), 1)
+        XCTAssertEqual(pending(h), 3)
+    }
+
+    func testA429RetryAfterHoldsTheQueueForegroundIncluded() {
+        let h = Harness(FakeEngine(), storage: returning())
+        h.start()
+        queueThree(h)
+        h.engine.modes["/v1/open"] = .status(429)
+        h.engine.retryAfter["/v1/open"] = "120"
+        h.strait.flushOpenReports()
+        XCTAssertEqual(opens(h), 1)
+        h.engine.modes["/v1/open"] = nil
+        h.engine.routes["/v1/open"] = accepted
+        h.clock.advance(119_000)
+        h.strait.flushOpenReports()
+        XCTAssertEqual(opens(h), 1, "held")
+        h.strait.onAppState(.background); h.clock.advance(5000); h.strait.onAppState(.active) // foreground at 124 s: past the hold
+        XCTAssertEqual(opens(h), 4)
+        XCTAssertEqual(pending(h), 0)
+    }
+
+    func testNothingIsSentBefore120s() {
+        let h = Harness(FakeEngine(), storage: returning())
+        h.start()
+        queueThree(h)
+        h.engine.modes["/v1/open"] = .status(429)
+        h.engine.retryAfter["/v1/open"] = "120"
+        h.strait.flushOpenReports()
+        h.engine.modes["/v1/open"] = nil
+        h.engine.routes["/v1/open"] = accepted
+        h.clock.advance(119_999)
+        h.strait.flushOpenReports()
+        h.strait.onAppState(.background); h.strait.onAppState(.active)
+        XCTAssertEqual(opens(h), 1)
+        h.clock.advance(1)
+        h.strait.flushOpenReports()
+        XCTAssertEqual(opens(h), 4)
+    }
+
+    func testWithoutRetryAfterBacksOffExponentiallyAndAnAnswerResetsIt() {
+        let h = Harness(FakeEngine(), storage: returning())
+        h.strait.random = { 0 } // the shortest jitter: half the step
+        h.start()
+        queueThree(h)
+        h.engine.modes["/v1/open"] = .status(503)
+        h.strait.flushOpenReports() // failure 1: hold 15 s
+        h.clock.advance(14_999)
+        h.strait.flushOpenReports()
+        XCTAssertEqual(opens(h), 1)
+        h.clock.advance(1)
+        h.strait.flushOpenReports() // failure 2: hold 30 s
+        XCTAssertEqual(opens(h), 2)
+        h.clock.advance(29_999)
+        h.strait.flushOpenReports()
+        XCTAssertEqual(opens(h), 2)
+        h.clock.advance(1)
+        h.engine.modes["/v1/open"] = nil
+        h.engine.routes["/v1/open"] = accepted
+        h.strait.flushOpenReports() // answered: sent, hold cleared
+        XCTAssertEqual(opens(h), 5)
+        h.engine.modes["/v1/open"] = .status(502)
+        h.strait.handle(urlString: "straitlink://a.b/4") // live report fails: failure 1 again (15 s, not 60 s)
+        h.engine.modes["/v1/open"] = nil
+        h.clock.advance(15_000)
+        h.strait.flushOpenReports()
+        XCTAssertEqual(pending(h), 0)
+    }
+
+    func testNoAnswerAddsNoHold() {
+        let h = Harness(FakeEngine(), storage: returning())
+        h.start()
+        queueThree(h)
+        h.strait.flushOpenReports() // still offline: stops at the first
+        XCTAssertEqual(opens(h), 1)
+        h.engine.modes["/v1/open"] = nil
+        h.engine.routes["/v1/open"] = accepted
         h.strait.flushOpenReports()
         XCTAssertEqual(pending(h), 0)
     }
@@ -1399,7 +1504,7 @@ final class DeferredMethodChoiceTests: XCTestCase {
         let engine = FakeEngine(["/v1/match": reply(matched: false, device: true, paste: false), "/v1/handoff/claim": claimed])
         let on = StraitLinks(StraitLinksConfig(
             publishableKey: PK, endpoint: ENDPOINT, storage: MemoryStorage(), transport: engine, device: { device },
-            callbackQueue: nil, observeLifecycle: false, clipboardBoost: true, pasteboard: spy
+            callbackQueue: nil, observeLifecycle: false, clipboardBoost: true, pasteboard: spy, installTime: { nil }
         ))
         on.start(initialURL: nil)
         XCTAssertEqual(spy.touched, 0)
@@ -1408,7 +1513,7 @@ final class DeferredMethodChoiceTests: XCTestCase {
         let engine2 = FakeEngine(["/v1/match": reply(matched: false, device: false, paste: true), "/v1/handoff/claim": claimed])
         let off = StraitLinks(StraitLinksConfig(
             publishableKey: PK, endpoint: ENDPOINT, storage: MemoryStorage(), transport: engine2, device: { device },
-            callbackQueue: nil, observeLifecycle: false, clipboardBoost: false, pasteboard: spy2
+            callbackQueue: nil, observeLifecycle: false, clipboardBoost: false, pasteboard: spy2, installTime: { nil }
         ))
         off.start(initialURL: nil)
         XCTAssertEqual(spy2.readCalls, 1)
@@ -1423,7 +1528,7 @@ final class DeferredMethodChoiceTests: XCTestCase {
             let engine = FakeEngine(["/v1/match": reply(matched: false, device: true, paste: paste), "/v1/handoff/claim": claimed])
             StraitLinks(StraitLinksConfig(
                 publishableKey: PK, endpoint: ENDPOINT, storage: storage, transport: engine, device: { device },
-                callbackQueue: nil, observeLifecycle: false, pasteboard: spy
+                callbackQueue: nil, observeLifecycle: false, pasteboard: spy, installTime: { nil }
             )).start(initialURL: nil)
         }
         XCTAssertEqual(spy1.touched, 0)

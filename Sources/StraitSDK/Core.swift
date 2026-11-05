@@ -336,6 +336,28 @@ func shouldRetryReport(_ status: Int?) -> Bool {
     return status == 429 || status >= 500
 }
 
+/// C1 backoff: the first hold after a 429/5xx is 15-30 s; each one in a row doubles it, up to `RETRY_MAX_MS`.
+let RETRY_BASE_MS = 30_000
+/// C1 backoff: never hold the queue longer than 1 hour (Retry-After included).
+let RETRY_MAX_MS = 3_600_000
+
+/// How long to hold the open/event queue after the `failures`-th 429/5xx answer in a row
+/// (contract B14, C1, shared-spec ADR 0005). Exponential with equal jitter:
+/// step = min(RETRY_MAX_MS, RETRY_BASE_MS × 2^(failures−1)), wait floor(step/2 + random × step/2),
+/// so phones that failed together spread out. A Retry-After in whole seconds (1-9 ASCII digits,
+/// spaces trimmed; an HTTP date or anything else is ignored) is a floor. Never more than RETRY_MAX_MS.
+/// `random` is in [0, 1] (the platform's random number).
+func retryDelayMs(failures: Int, retryAfter: String?, random: Double) -> Int {
+    let n = min(max(failures, 1), 17)
+    let half = Double(min(RETRY_MAX_MS, RETRY_BASE_MS << (n - 1))) / 2
+    let r = random > 0 ? min(random, 1) : 0 // NaN → 0
+    let backoff = Int((half + r * half).rounded(.down))
+    let s = retryAfter?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let digits = (1...9).contains(s.utf8.count) && s.utf8.allSatisfy { $0 >= 0x30 && $0 <= 0x39 }
+    let server = digits ? min(Int(s)!, RETRY_MAX_MS / 1000) * 1000 : 0
+    return min(RETRY_MAX_MS, max(backoff, server))
+}
+
 /// A unique id for one link open (the engine de-duplicates retries by it):
 /// `o_<base36 ms>_<12 × [a-z0-9]>`.
 func newOpenId(_ now: Double, random: () -> Double = { Double.random(in: 0..<1) }) -> String {
@@ -343,6 +365,37 @@ func newOpenId(_ now: Double, random: () -> Double = { Double.random(in: 0..<1) 
     var r = ""
     for _ in 0..<12 { r.append(alphabet[min(35, Int(random() * 36))]) }
     return "o_\(String(Int64(now), radix: 36))_\(r)"
+}
+
+/// A unique id for one conversion event when the app gives none (contract B13a): the engine
+/// stores an eventId once, so a retried send is never counted twice. Same shape as newOpenId.
+func newEventId(_ now: Double, random: () -> Double = { Double.random(in: 0..<1) }) -> String {
+    "e" + newOpenId(now, random: random).dropFirst()
+}
+
+/// What `start()` does with the once-per-install flag (contract B6a, shared-spec ADR 0003).
+struct FirstLaunchState: Equatable {
+    /// Run the once-per-install deferred check / count this launch as the install's first.
+    let firstLaunch: Bool
+    /// Set `strait.deferredChecked` to "" first: the storage came back from another install.
+    let clearFlag: Bool
+    /// Then write this to `strait.installTime` (nil = leave it).
+    let storeInstallTime: String?
+}
+
+/// B6a: storage restored from a backup of another install (a restored iPhone) brings back
+/// `strait.deferredChecked`. The app's install time, stored next to it, tells: a different
+/// stored time = a new install, so the check runs again. No stored time (an app updated from
+/// an older SDK) = adopt it, never a new install. Unknown install time (nil, 0, negative, not
+/// finite) = the B6 rule alone.
+func firstLaunchState(flag: String?, stored: String?, installTime: Double?) -> FirstLaunchState {
+    // A fraction of a ms is truncated; anything past Int64 is no real time (and would trap).
+    let t = installTime.flatMap { $0.isFinite && $0 >= 1 && $0 < 9.2e18 ? String(Int64($0)) : nil }
+    let stored = stored?.isEmpty == false ? stored : nil
+    if flag != "1" { return FirstLaunchState(firstLaunch: true, clearFlag: false, storeInstallTime: t != stored ? t : nil) }
+    guard let t = t, t != stored else { return FirstLaunchState(firstLaunch: false, clearFlag: false, storeInstallTime: nil) }
+    if stored == nil { return FirstLaunchState(firstLaunch: false, clearFlag: false, storeInstallTime: t) }
+    return FirstLaunchState(firstLaunch: true, clearFlag: true, storeInstallTime: t)
 }
 
 /// The workspace's live paste-handoff choice in a `/v1/match` reply (B19):
