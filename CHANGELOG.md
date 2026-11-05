@@ -4,7 +4,8 @@
 
 - Fix (privacy): the legacy `Strait.resolveDeferredLink` ignored the opt-out switch and still called
   `/v1/match` (one install row per call). It now reads the switch from `storage:` (default
-  `UserDefaultsStorage()`, the same as `StraitLinks`); while off it sends nothing and returns `.none`.
+  `UserDefaultsStorage()`, the same as `StraitLinks`); while off it sends nothing and returns `.none`. If
+  you give `StraitLinks` another storage (e.g. an App Group), pass the same one here.
 - Fix: switching the SDK off while a short link's `/v1/resolve` is still out no longer answers
   `reason: "network"`; the link routes through `/v1/lookup` as an opted-out tap does, and nothing is queued.
   A reply that lands after the switch went off keeps no tap.
