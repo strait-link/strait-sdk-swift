@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.10.0 (unreleased, launch week)
+## 0.10.0 (5 Nov 2026)
 
 - Fix: reinstalls from a link are no longer lost. A phone restored from an iCloud or Finder backup
   put back the "deferred check done" flag (`UserDefaults`), so a reinstall skipped its deferred link
