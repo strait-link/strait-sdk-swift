@@ -274,7 +274,7 @@ public final class StraitLinks {
     public static let enabledKey = "strait.enabled"
     /// This SDK's version, sent as `sdkVersion` with every request that records an app open or
     /// install. Equals the newest `## X.Y.Z` in CHANGELOG.md (a test checks it): bump both together.
-    public static let sdkVersion = "0.10.0"
+    public static let sdkVersion = "0.11.0"
 
     let config: StraitLinksConfig
     let base: String

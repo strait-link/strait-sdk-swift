@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 (7 Nov 2026)
 
 - New: every request that records an app open or install (`/v1/open`, `/v1/resolve`, `/v1/match`,
   `/v1/handoff/claim`, saved reports sent later included) now also sends `appVersion`, your app's version
