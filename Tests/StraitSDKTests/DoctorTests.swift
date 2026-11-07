@@ -67,9 +67,14 @@ final class DoctorFindingsTests: XCTestCase {
 
     func testNoApp() {
         let none = DoctorFinding(id: "app.none", severity: "error", title: "No iOS app is set up for \(HOST)",
-            fix: "Add your app in Dashboard → Apps & stores.")
+            fix: "Fill in Dashboard → Apps & stores (Team ID and bundle ID), wait a minute, then check again. Already done? Make sure \(HOST) is your link domain from Dashboard → Get started.")
         XCTAssertEqual(check(file: aasa([]))[1], none)
         XCTAssertEqual(check(file: DoctorFile(status: 200, body: "{\"applinks\":{}}"))[1], none)
+        // User-lens audit item 10: the link domain answers 404 {"error":"not configured"} until Apps & stores
+        // has the iPhone app. That is app.none (fill in Apps & stores), not host.file_missing.
+        let notConfigured = check(file: DoctorFile(status: 404, body: "{\"error\":\"not configured\"}"))
+        XCTAssertEqual(notConfigured.map(\.id), ["key.ok", "app.none"])
+        XCTAssertEqual(notConfigured[1], none)
     }
 
     func testAppMissing() {

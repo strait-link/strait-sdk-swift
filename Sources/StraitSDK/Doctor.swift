@@ -65,14 +65,17 @@ public func doctorFindings(publishableKey: String, endpoint: String, platform: S
               "Check that endpoint is your link domain (Dashboard → Get started) and that this device is online.")
         return out
     }
-    guard status == 200, let ids = aasaAppIDs(file?.body) else {
+    // A 404 "not configured" from a Strait link domain is no app yet (app.none), not a missing file.
+    guard let ids = status == 200 ? aasaAppIDs(file?.body) : (notConfigured(status, file?.body) ? [] : nil) else {
         error("host.file_missing", "\(host) doesn't serve apple-app-site-association",
               "Use your Strait link domain as endpoint (Dashboard → Get started); Strait serves this file there.")
         return out
     }
     let listed = ids.joined(separator: ", ")
     if ids.isEmpty {
-        error("app.none", "No \(platform == "ios" ? "iOS" : platform) app is set up for \(host)", "Add your app in Dashboard → Apps & stores.")
+        error("app.none", "No \(platform == "ios" ? "iOS" : platform) app is set up for \(host)",
+              "Fill in Dashboard → Apps & stores (\(platform == "ios" ? "Team ID and bundle ID" : "package name and SHA-256 fingerprint")), wait a minute, then check again. "
+                + "Already done? Make sure \(host) is your link domain from Dashboard → Get started.")
     } else if let app = appId, !app.isEmpty {
         // iOS can't read its Team ID at runtime: match the bundle ID suffix, show the full appID.
         if let match = ids.first(where: { $0.hasSuffix("." + app) }) {
@@ -95,6 +98,13 @@ private func doctorHost(_ endpoint: String) -> String? {
 
 /// Every appID in `applinks.details[]` (`appIDs` and the legacy `appID`), in order, once each;
 /// nil when the body isn't an apple-app-site-association JSON.
+/// A Strait link domain answers 404 {"error":"not configured"} until Apps & stores has this platform's app.
+private func notConfigured(_ status: Int, _ body: String?) -> Bool {
+    guard status == 404, let data = body?.data(using: .utf8),
+          let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return false }
+    return json["error"] as? String == "not configured"
+}
+
 private func aasaAppIDs(_ body: String?) -> [String]? {
     guard let data = body?.data(using: .utf8),
           let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
