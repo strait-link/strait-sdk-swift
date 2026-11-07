@@ -65,14 +65,17 @@ public func doctorFindings(publishableKey: String, endpoint: String, platform: S
               "Check that endpoint is your link domain (Dashboard → Get started) and that this device is online.")
         return out
     }
-    guard status == 200, let ids = aasaAppIDs(file?.body) else {
+    // A 404 "not configured" from a Strait link domain is no app yet (app.none), not a missing file.
+    guard let ids = status == 200 ? aasaAppIDs(file?.body) : (notConfigured(status, file?.body) ? [] : nil) else {
         error("host.file_missing", "\(host) doesn't serve apple-app-site-association",
               "Use your Strait link domain as endpoint (Dashboard → Get started); Strait serves this file there.")
         return out
     }
     let listed = ids.joined(separator: ", ")
     if ids.isEmpty {
-        error("app.none", "No \(platform == "ios" ? "iOS" : platform) app is set up for \(host)", "Add your app in Dashboard → Apps & stores.")
+        error("app.none", "No \(platform == "ios" ? "iOS" : platform) app is set up for \(host)",
+              "Fill in Dashboard → Apps & stores (\(platform == "ios" ? "Team ID and bundle ID" : "package name and SHA-256 fingerprint")), wait a minute, then check again. "
+                + "Already done? Make sure \(host) is your link domain from Dashboard → Get started.")
     } else if let app = appId, !app.isEmpty {
         // iOS can't read its Team ID at runtime: match the bundle ID suffix, show the full appID.
         if let match = ids.first(where: { $0.hasSuffix("." + app) }) {
@@ -91,6 +94,12 @@ private func doctorHost(_ endpoint: String) -> String? {
     guard let url = URL(string: endpoint), url.scheme?.lowercased() == "https",
           let host = url.host, !host.isEmpty else { return nil }
     return host
+}
+
+/// A Strait link domain answers 404 {"error":"not configured"} until Apps & stores has this platform's app.
+/// Compared byte for byte (what the engine's well-known route sends), so every SDK agrees on any other body.
+private func notConfigured(_ status: Int, _ body: String?) -> Bool {
+    status == 404 && body == #"{"error":"not configured"}"#
 }
 
 /// Every appID in `applinks.details[]` (`appIDs` and the legacy `appID`), in order, once each;

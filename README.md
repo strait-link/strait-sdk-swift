@@ -16,7 +16,7 @@ A tap opens the exact screen, and every link open and install is recorded in you
 <p align="center">
   <a href="https://github.com/strait-link/strait-sdk-swift/tags"><img alt="Latest version" src="https://img.shields.io/github/v/tag/strait-link/strait-sdk-swift?sort=semver&label=version&style=flat-square&labelColor=0F0D0A&color=423B33"></a>
   <a href="https://straitlink.in/platform-status/"><img alt="SDK: Live" src="https://img.shields.io/badge/SDK-live-423B33?style=flat-square&labelColor=0F0D0A"></a>
-  <a href="https://straitlink.in/iphone-status/"><img alt="iPhone: Live" src="https://img.shields.io/badge/iPhone-live-423B33?style=flat-square&labelColor=0F0D0A"></a>
+  <a href="https://straitlink.in/iphone-status/"><img alt="iPhone links: live · install matching: opt-in" src="https://img.shields.io/badge/iPhone%20links-live%20%C2%B7%20install%20matching%3A%20opt--in-423B33?style=flat-square&labelColor=0F0D0A"></a>
   <a href="https://github.com/strait-link/strait-sdk-swift/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/strait-link/strait-sdk-swift/ci.yml?branch=main&label=CI&style=flat-square&labelColor=0F0D0A"></a>
   <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-423B33?style=flat-square&labelColor=0F0D0A"></a>
 </p>
@@ -47,6 +47,14 @@ the server and every other SDK via shared golden vectors
 > (iOS 26, 21 Oct 2026): Universal Links open the app on the link's screen with the app open, in
 > the background and closed. The scripted real-device proof is in
 > [`Examples/StraitReference`](Examples/StraitReference/README.md).
+
+## Guided setup
+
+There's no `strait init` for Xcode projects yet. For a guided setup, follow the 6-step [iPhone quickstart](https://straitlink.in/docs/quick-start/iphone/) (about 15 minutes, with a tap test). Or let your AI coding tool do it: connect the [Strait MCP server](https://straitlink.in/docs/mcp/) and run its `get_started` prompt with platform `ios`; it pastes the exact setup from the docs. Then check that your link domain lists your app:
+
+```sh
+npx @straitlink/cli doctor --host <your-handle>.strait.link --ios <your.bundle.id>
+```
 
 ## Quick start (60 seconds)
 
