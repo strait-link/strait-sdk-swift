@@ -96,15 +96,14 @@ private func doctorHost(_ endpoint: String) -> String? {
     return host
 }
 
-/// Every appID in `applinks.details[]` (`appIDs` and the legacy `appID`), in order, once each;
-/// nil when the body isn't an apple-app-site-association JSON.
 /// A Strait link domain answers 404 {"error":"not configured"} until Apps & stores has this platform's app.
+/// Compared byte for byte (what the engine's well-known route sends), so every SDK agrees on any other body.
 private func notConfigured(_ status: Int, _ body: String?) -> Bool {
-    guard status == 404, let data = body?.data(using: .utf8),
-          let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return false }
-    return json["error"] as? String == "not configured"
+    status == 404 && body == #"{"error":"not configured"}"#
 }
 
+/// Every appID in `applinks.details[]` (`appIDs` and the legacy `appID`), in order, once each;
+/// nil when the body isn't an apple-app-site-association JSON.
 private func aasaAppIDs(_ body: String?) -> [String]? {
     guard let data = body?.data(using: .utf8),
           let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],

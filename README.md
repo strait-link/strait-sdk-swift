@@ -48,9 +48,9 @@ the server and every other SDK via shared golden vectors
 > the background and closed. The scripted real-device proof is in
 > [`Examples/StraitReference`](Examples/StraitReference/README.md).
 
-## Fastest path (about 5 minutes)
+## Guided setup
 
-There's no `strait init` for Xcode projects yet. The fastest path is the 6-step [iPhone quickstart](https://straitlink.in/docs/quick-start/iphone/). Or let your AI coding tool do it: connect the [Strait MCP server](https://straitlink.in/docs/mcp/) and run its `get_started` prompt with platform `ios`; it pastes the exact setup from the docs. Then check that your link domain lists your app:
+There's no `strait init` for Xcode projects yet. For a guided setup, follow the 6-step [iPhone quickstart](https://straitlink.in/docs/quick-start/iphone/) (about 15 minutes, with a tap test). Or let your AI coding tool do it: connect the [Strait MCP server](https://straitlink.in/docs/mcp/) and run its `get_started` prompt with platform `ios`; it pastes the exact setup from the docs. Then check that your link domain lists your app:
 
 ```sh
 npx @straitlink/cli doctor --host <your-handle>.strait.link --ios <your.bundle.id>
