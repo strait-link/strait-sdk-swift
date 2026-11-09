@@ -130,9 +130,10 @@ func wireVersion(_ v: String?) -> String? {
 
 /// td2-23: `appVersion` + `sdkVersion` on a body that records an app open or install (not /v1/lookup or
 /// /v1/event), so support can tell which app and SDK version a customer runs.
-func addVersions(_ body: inout [String: Any], appVersion: String?) {
+/// `sdkVersion`: a wrapper's own name/version (B25, `StraitLinksConfig.sdkVersion`), else this SDK's.
+func addVersions(_ body: inout [String: Any], appVersion: String?, sdkVersion: String? = nil) {
     if let v = wireVersion(appVersion) { body["appVersion"] = v }
-    body["sdkVersion"] = StraitLinks.sdkVersion
+    body["sdkVersion"] = wireVersion(sdkVersion) ?? StraitLinks.sdkVersion
 }
 
 /// "iPad" -> tablet, "iPhone" / "iPod touch" -> phone; an iOS app running on a Mac -> nil.

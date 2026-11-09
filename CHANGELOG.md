@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.3 (9 Nov 2026)
+
+- New: `StraitLinksConfig.sdkVersion`, for SDKs built on this one. The Capacitor plugin sets it to `capacitor/<version>`, so its
+  open and install reports name the plugin instead of this SDK (contract B25, shared-spec ADR 0006); a saved report keeps it.
+  nil or unusable = this SDK's own version, as before. Apps leave it nil; nothing changes for a native app.
+
 ## 0.11.2 (9 Nov 2026)
 
 - iPhone install matching across IPv4 / IPv6 (contract B24, engine ADR 0101): when Safari tapped the link over IPv4

@@ -129,6 +129,39 @@ final class AppVersionTests: XCTestCase {
         }
     }
 
+    /// B25: a wrapper over this SDK (the Capacitor plugin) names itself in `sdkVersion`, so support can tell
+    /// its apps from native ones; it is kept with a saved report like the app version.
+    func testWrapperSdkVersionIsSentOnEveryRecordingCall() {
+        let engine = FakeEngine(routes)
+        let h = Harness(engine, appVersion: "2.4.1", sdkVersion: "capacitor/0.4.3")
+        h.start()
+        h.strait.handle(urlString: "https://links.test/sale")
+        h.strait.handle(urlString: "straitlink://shop.example/product/42")
+        for path in ["/v1/match", "/v1/resolve", "/v1/open"] {
+            XCTAssertEqual(engine.calls(to: path).first?.body?["sdkVersion"] as? String, "capacitor/0.4.3", path)
+            XCTAssertEqual(engine.calls(to: path).first?.body?["appVersion"] as? String, "2.4.1", path)
+        }
+    }
+
+    func testWrapperSdkVersionIsKeptWithASavedReport() {
+        let engine = FakeEngine(routes)
+        engine.modes["/v1/resolve"] = .offline
+        let h = Harness(engine, storage: firstLaunchDone(), sdkVersion: "capacitor/0.4.3")
+        h.start()
+        h.strait.handle(urlString: "https://links.test/sale")
+        engine.modes["/v1/resolve"] = nil
+        h.strait.flushOpenReports()
+        XCTAssertEqual(engine.calls(to: "/v1/open").first?.body?["sdkVersion"] as? String, "capacitor/0.4.3")
+    }
+
+    func testUnusableWrapperSdkVersionFallsBackToThisSdk() {
+        for bad in [nil, "", "   ", "cap/β"] as [String?] {
+            let h = Harness(FakeEngine(routes), sdkVersion: bad)
+            h.start()
+            XCTAssertEqual(h.engine.calls(to: "/v1/match").first?.body?["sdkVersion"] as? String, StraitLinks.sdkVersion, String(describing: bad))
+        }
+    }
+
     func testAppVersionComesFromTheBundleShortVersion() {
         XCTAssertEqual(appVersion(info: ["CFBundleShortVersionString": "5.1.2", "CFBundleVersion": "812"]), "5.1.2")
         XCTAssertNil(appVersion(info: ["CFBundleVersion": "812"]))

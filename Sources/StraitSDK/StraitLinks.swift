@@ -186,6 +186,10 @@ public struct StraitLinksConfig {
     /// records an app open or install, so support can see which app version a customer runs. Trimmed
     /// and capped at 64 characters; not sent when empty or not printable ASCII. Default: `currentAppVersion()`.
     public var appVersion: String?
+    /// For SDKs built on this one (the Capacitor plugin): the name and version sent as `sdkVersion` instead of
+    /// `StraitLinks.sdkVersion`, e.g. `"capacitor/0.4.3"` (contract B25), so support can tell a wrapper's app
+    /// from a native one. Same rule as `appVersion`; nil or unusable = this SDK's version. Apps leave it nil.
+    public var sdkVersion: String?
 
     public init(
         publishableKey: String,
@@ -202,7 +206,8 @@ public struct StraitLinksConfig {
         pasteboard: StraitPasteboard = SystemPasteboard(),
         deviceClass: String? = currentDeviceClass(),
         installTime: @escaping () -> Double? = { StraitLinksConfig.markerInstallTime() },
-        appVersion: String? = currentAppVersion()
+        appVersion: String? = currentAppVersion(),
+        sdkVersion: String? = nil
     ) {
         self.publishableKey = publishableKey
         self.endpoint = endpoint
@@ -219,6 +224,7 @@ public struct StraitLinksConfig {
         self.deviceClass = deviceClass
         self.installTime = installTime
         self.appVersion = appVersion
+        self.sdkVersion = sdkVersion
     }
 
     /// The default `installTime` (contract B6a): the creation time, in whole ms, of the marker
@@ -274,7 +280,7 @@ public final class StraitLinks {
     public static let enabledKey = "strait.enabled"
     /// This SDK's version, sent as `sdkVersion` with every request that records an app open or
     /// install. Equals the newest `## X.Y.Z` in CHANGELOG.md (a test checks it): bump both together.
-    public static let sdkVersion = "0.11.2"
+    public static let sdkVersion = "0.11.3"
 
     let config: StraitLinksConfig
     let base: String
@@ -624,7 +630,7 @@ public final class StraitLinks {
         var body: [String: Any] = [
             "publishableKey": config.publishableKey, "token": token, "platform": "ios", "openId": id, "at": Int64(t0),
         ]
-        addVersions(&body, appVersion: config.appVersion)
+        addVersions(&body, appVersion: config.appVersion, sdkVersion: config.sdkVersion)
         call("POST", "/v1/handoff/claim", body) { [self] r in
             guard case let .success(res) = r, !shouldRetryReport(res.status) else {
                 return completion(.unmatched(reason: "network"))
@@ -722,7 +728,7 @@ public final class StraitLinks {
                 report(OpenReport(
                     openId: id, kind: .direct, route: route, appState: appState, platform: platform, url: reportUrl(url),
                     clickId: clickId, linkId: nil, matched: true, reason: nil, firstLaunch: firstLaunch, at: t0,
-                    appVersion: config.appVersion
+                    appVersion: config.appVersion, sdkVersion: config.sdkVersion
                 ))
             }
             done(route, true, nil, Destination(url: url, path: path, params: params), nil)
@@ -736,14 +742,14 @@ public final class StraitLinks {
             let base = OpenReport(
                 openId: id, kind: .direct, route: .appLink, appState: appState, platform: platform, url: reported,
                 clickId: nil, linkId: nil, matched: false, reason: nil, firstLaunch: firstLaunch, at: t0,
-                appVersion: config.appVersion
+                appVersion: config.appVersion, sdkVersion: config.sdkVersion
             )
             var body: [String: Any] = [
                 "publishableKey": config.publishableKey, "url": reported, "platform": platform,
                 "openId": id, "appState": appState.rawValue, "firstLaunch": firstLaunch, "at": Int64(t0),
             ]
             if let dc = config.deviceClass { body["deviceClass"] = dc }
-            addVersions(&body, appVersion: config.appVersion)
+            addVersions(&body, appVersion: config.appVersion, sdkVersion: config.sdkVersion)
             call("POST", "/v1/resolve", body) { [self] r in
                 guard case let .success(res) = r else {
                     // Switched off while the resolve was out (F4): route the way an opted-out tap does.
@@ -834,7 +840,7 @@ public final class StraitLinks {
         if record {
             body["openId"] = id
             body["at"] = Int64(t0) // whole ms, like the other SDKs
-            addVersions(&body, appVersion: config.appVersion)
+            addVersions(&body, appVersion: config.appVersion, sdkVersion: config.sdkVersion)
         } else {
             body["record"] = false // read only: the engine adds no install, open or webhook
         }
@@ -1102,7 +1108,7 @@ struct OpenReport: Codable {
     init(
         openId: String, kind: LinkKind, route: LinkRoute, appState: AppStateAtLink, platform: String,
         url: String?, clickId: String?, linkId: String?, matched: Bool, reason: String?, firstLaunch: Bool, at: Double,
-        appVersion: String?
+        appVersion: String?, sdkVersion: String? = nil
     ) {
         self.openId = openId
         self.kind = kind.rawValue
@@ -1117,7 +1123,7 @@ struct OpenReport: Codable {
         self.firstLaunch = firstLaunch
         self.at = Int64(at)
         self.appVersion = wireVersion(appVersion)
-        self.sdkVersion = StraitLinks.sdkVersion
+        self.sdkVersion = wireVersion(sdkVersion) ?? StraitLinks.sdkVersion
     }
 }
 
