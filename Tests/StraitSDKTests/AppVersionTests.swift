@@ -14,7 +14,7 @@ final class AppVersionTests: XCTestCase {
 
     private func assertVersions(_ body: [String: Any]?, app: String? = "2.4.1", _ what: String, line: UInt = #line) {
         XCTAssertEqual(body?["appVersion"] as? String, app, what, line: line)
-        XCTAssertEqual(body?["sdkVersion"] as? String, StraitLinks.sdkVersion, what, line: line)
+        XCTAssertEqual(body?["sdkVersion"] as? String, "ios/\(StraitLinks.sdkVersion)", what, line: line)
     }
 
     private func assertNoVersions(_ body: [String: Any]?, _ what: String, line: UInt = #line) {
@@ -125,7 +125,7 @@ final class AppVersionTests: XCTestCase {
             let body = h.engine.calls(to: "/v1/match").first?.body
             XCTAssertEqual(body?["appVersion"] as? String, sent, String(describing: given))
             if sent == nil { XCTAssertFalse(body?.keys.contains("appVersion") ?? true, String(describing: given)) }
-            XCTAssertEqual(body?["sdkVersion"] as? String, StraitLinks.sdkVersion)
+            XCTAssertEqual(body?["sdkVersion"] as? String, "ios/\(StraitLinks.sdkVersion)")
         }
     }
 
@@ -158,7 +158,7 @@ final class AppVersionTests: XCTestCase {
         for bad in [nil, "", "   ", "cap/β"] as [String?] {
             let h = Harness(FakeEngine(routes), sdkVersion: bad)
             h.start()
-            XCTAssertEqual(h.engine.calls(to: "/v1/match").first?.body?["sdkVersion"] as? String, StraitLinks.sdkVersion, String(describing: bad))
+            XCTAssertEqual(h.engine.calls(to: "/v1/match").first?.body?["sdkVersion"] as? String, "ios/\(StraitLinks.sdkVersion)", String(describing: bad))
         }
     }
 
@@ -215,7 +215,7 @@ final class AppVersionTests: XCTestCase {
             session: URLSession(configuration: c), storage: MemoryStorage()
         )
         XCTAssertEqual(BodyRecorder.bodies.count, 1)
-        XCTAssertEqual(BodyRecorder.bodies.first?["sdkVersion"] as? String, StraitLinks.sdkVersion)
+        XCTAssertEqual(BodyRecorder.bodies.first?["sdkVersion"] as? String, "ios/\(StraitLinks.sdkVersion)")
         XCTAssertEqual(BodyRecorder.bodies.first?["appVersion"] as? String, "7.1.0")
     }
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.4 (9 Nov 2026)
+
+- The SDK now names itself when it reports an app open or install: `sdkVersion` is `ios/0.11.4`, not a bare `0.11.4`
+  (contract B25, shared-spec ADR 0007). The same number can belong to the React Native SDK, so Strait couldn't tell which
+  SDK an app runs; now the dashboard can say exactly when your app is on an older Swift SDK. `StraitLinks.sdkVersion` is
+  still the plain number, and a wrapper's `StraitLinksConfig.sdkVersion` (Capacitor) still wins. Nothing else changes.
+
 ## 0.11.3 (9 Nov 2026)
 
 - New: `StraitLinksConfig.sdkVersion`, for SDKs built on this one. The Capacitor plugin sets it to `capacitor/<version>`, so its
