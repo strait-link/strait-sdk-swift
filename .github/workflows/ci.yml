@@ -10,7 +10,9 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - run: swift test
+      # Thread Sanitizer on every test (td2-12): a data race fails CI, not a customer's app.
+      # ConcurrencyStressTests hits the public entry points from many threads at once.
+      - run: swift test --sanitize=thread
       - run: node scripts/spec-vectors.mjs
       # Compile for iOS too: UIKit code (clipboard boost, StraitPasteButton) is skipped on macOS.
       - run: xcodebuild -scheme StraitSDK -destination 'generic/platform=iOS' -skipPackagePluginValidation build CODE_SIGNING_ALLOWED=NO
