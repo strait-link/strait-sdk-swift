@@ -533,22 +533,50 @@ struct UserIdField: Equatable {
     var userIdHashed: Bool
 }
 
-/// B27 (shared-spec ADR 0009): what `setUserId(id)` sends with later events, or nil (nothing sent).
-/// Trimmed; empty, longer than USER_ID_MAX or holding a control character = nil. An email (any `@`) is
-/// sent as the SHA-256 hex of its lower-case form, a phone number (only digits, spaces, `+ ( ) . -`, with
-/// 8-15 digits) as the SHA-256 hex of its digits: `userIdHashed: true`, the raw value never leaves the device.
+/// B27 (shared-spec ADR 0009, ADR 0010): what `setUserId(id)` sends with later events, or nil (nothing sent).
+/// Trimmed; empty, longer than USER_ID_MAX or holding a control character = nil. An email (any `@`, `＠` or `﹫`)
+/// is sent as the SHA-256 hex of its lower-case form, a phone number (`phoneNumberForm`) as the SHA-256 hex of its
+/// canonical form: `userIdHashed: true`, the raw value never leaves the device.
 func userIdField(_ id: String?) -> UserIdField? {
     guard let t = id?.trimmingCharacters(in: jsTrimSet), !t.isEmpty, t.utf16.count <= USER_ID_MAX else { return nil }
     let scalars = t.unicodeScalars
     // On code points, never grapheme clusters: "a@\u{200C}b" holds no Character "@".
-    if scalars.contains("@") { return UserIdField(userId: sha256Hex(t.lowercased()), userIdHashed: true) }
-    let digits = String(String.UnicodeScalarView(scalars.filter { ("0"..."9").contains($0) }))
-    let phoneChars = scalars.dropFirst(scalars.first == "+" ? 1 : 0)
-    if !phoneChars.isEmpty, phoneChars.allSatisfy({ "0123456789 ().-".unicodeScalars.contains($0) }), (8...15).contains(digits.count) {
-        return UserIdField(userId: sha256Hex(digits), userIdHashed: true)
-    }
+    if scalars.contains(where: { $0 == "@" || $0 == "\u{FF20}" || $0 == "\u{FE6B}" }) { return UserIdField(userId: sha256Hex(t.lowercased()), userIdHashed: true) }
+    if let phone = phoneNumberForm(t) { return UserIdField(userId: sha256Hex(phone), userIdHashed: true) }
     if scalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }) { return nil }
     return UserIdField(userId: t, userIdHashed: false)
+}
+
+/// The zero of each run of ten decimal digits B27 reads: ASCII, Arabic-Indic, Eastern Arabic-Indic, Devanagari, Bengali, Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam, full-width.
+private let digitZeros: [UInt16] = [0x30, 0x660, 0x6F0, 0x966, 0x9E6, 0xA66, 0xAE6, 0xB66, 0xBE6, 0xC66, 0xCE6, 0xD66, 0xFF10]
+
+/// Characters a written phone number may hold between its digits (B27 v15): spaces, dashes, dots, brackets, slashes, invisible marks.
+private func isPhoneSeparator(_ c: UInt16) -> Bool {
+    c == 0x20 || c == 0x28 || c == 0x29 || c == 0x2D || c == 0x2E || c == 0x2F || c == 0xA0 ||
+        (0x2000...0x2015).contains(c) || (0x202A...0x202F).contains(c) || c == 0x205F || c == 0x2060 || (0x2066...0x2069).contains(c) ||
+        c == 0x2212 || c == 0x3000 || c == 0xFEFF || c == 0xFF08 || c == 0xFF09 || (0xFF0D...0xFF0F).contains(c)
+}
+
+/// B27 v15 (shared-spec ADR 0010): the canonical form of a phone number, or nil when `t` is not one. After an
+/// optional `tel:` (any ASCII case), `t` may hold only decimal digits (any `digitZeros` run), separators and one
+/// `+` / `＋` before the first digit, with 8-15 digits (8-17 when they start with the international `00` and there
+/// is no `+`). Form: `+` and the digits when written with `+`; `+` and the digits after `00`; else the digits
+/// (ASCII). Walks UTF-16 units, like every other SDK (all listed code points are in the BMP).
+func phoneNumberForm(_ t: String) -> String? {
+    var units = Array(t.utf16)
+    if units.count >= 4, String(decoding: units[0..<4], as: UTF16.self).lowercased() == "tel:", units[0..<4].allSatisfy({ $0 < 0x80 }) {
+        units.removeFirst(4)
+    }
+    var plus = false
+    var digits = ""
+    for c in units {
+        if let zero = digitZeros.first(where: { c >= $0 && c <= $0 + 9 }) { digits.append(String(c - zero)) }
+        else if (c == 0x2B || c == 0xFF0B) && !plus && digits.isEmpty { plus = true }
+        else if !isPhoneSeparator(c) { return nil }
+    }
+    let zeroZero = !plus && digits.hasPrefix("00")
+    guard digits.count >= 8, digits.count <= (zeroZero ? 17 : 15) else { return nil }
+    return plus ? "+" + digits : zeroZero ? "+" + digits.dropFirst(2) : digits
 }
 
 /// What JavaScript's `String.prototype.trim` strips, exactly (vectors v14): not U+001C-U+001F, U+0085 or U+200B.

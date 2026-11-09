@@ -22,7 +22,16 @@ final class UserIdFieldTests: XCTestCase {
     }
 
     func testHashesAPhoneNumberAsItsDigits() {
-        XCTAssertEqual(userIdField("+91 98765-43210"), UserIdField(userId: sha256Hex("919876543210"), userIdHashed: true))
+        XCTAssertEqual(userIdField("+91 98765-43210"), UserIdField(userId: sha256Hex("+919876543210"), userIdHashed: true))
+        // v15 (shared-spec ADR 0010): formats v14 sent raw; 00 = +; the hashed form keeps the +.
+        for p in ["(+91) 98765 43210", "0091 98765 43210", "+91\u{A0}98765\u{A0}43210", "\u{202A}+91 98765 43210\u{202C}",
+                  "+91\u{2013}98765\u{2013}43210", "tel:+91-98765-43210", "\u{FF0B}\u{FF19}\u{FF11} \u{FF19}\u{FF18}\u{FF17}\u{FF16}\u{FF15} \u{FF14}\u{FF13}\u{FF12}\u{FF11}\u{FF10}"] {
+            XCTAssertEqual(userIdField(p), UserIdField(userId: sha256Hex("+919876543210"), userIdHashed: true), p)
+        }
+        XCTAssertEqual(userIdField("\u{96F}\u{96E}\u{96D}\u{96C}\u{96B}\u{96A}\u{969}\u{968}\u{967}\u{966}"), UserIdField(userId: sha256Hex("9876543210"), userIdHashed: true))
+        XCTAssertEqual(userIdField("98765/43210"), UserIdField(userId: sha256Hex("9876543210"), userIdHashed: true))
+        XCTAssertEqual(userIdField("Priya\u{FF20}Example.com"), UserIdField(userId: sha256Hex("priya\u{FF20}example.com"), userIdHashed: true))
+        for id in ["98765+43210", "+91 98765 43210 ext 12", "TEL:1234567", "98765_43210"] { XCTAssertEqual(userIdField(id), UserIdField(userId: id, userIdHashed: false), id) }
     }
 
     /// JavaScript's String.prototype.trim set, exactly (vectors v14).
