@@ -23,6 +23,7 @@ final class FakeEngine: StraitTransport {
         let path: String
         let query: String?
         let body: [String: Any]?
+        var host: String? = nil
     }
     var routes: [String: [String: Any]]
     var offline = false
@@ -39,24 +40,26 @@ final class FakeEngine: StraitTransport {
     func send(_ request: URLRequest, completion: @escaping (Result<StraitHTTPResponse, Error>) -> Void) {
         let url = request.url!
         let body = request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        calls.append(Call(method: request.httpMethod ?? "GET", path: url.path, query: url.query, body: body))
+        calls.append(Call(method: request.httpMethod ?? "GET", path: url.path, query: url.query, body: body, host: url.host))
         onCall[url.path]?()
+        // A route keyed "host/path" answers only that host (B24: the engine's IPv4-only URL).
+        let key = routes["\(url.host ?? "")\(url.path)"] != nil || modes["\(url.host ?? "")\(url.path)"] != nil ? "\(url.host ?? "")\(url.path)" : url.path
         if offline { return completion(.failure(URLError(.notConnectedToInternet))) }
-        switch modes[url.path] {
+        switch modes[key] {
         case .offline?: return completion(.failure(URLError(.notConnectedToInternet)))
         case .hang?: return
         case let .hold(code)?:
-            let payload = routes[url.path] ?? [:]
+            let payload = routes[key] ?? [:]
             held.append { completion(.success(StraitHTTPResponse(status: code, data: try! JSONSerialization.data(withJSONObject: payload)))) }
             return
         case let .status(code)?:
-            let payload = routes[url.path] ?? [:]
+            let payload = routes[key] ?? [:]
             return completion(.success(StraitHTTPResponse(
-                status: code, data: try! JSONSerialization.data(withJSONObject: payload), retryAfter: retryAfter[url.path]
+                status: code, data: try! JSONSerialization.data(withJSONObject: payload), retryAfter: retryAfter[key]
             )))
         case nil: break
         }
-        guard let payload = routes[url.path] else {
+        guard let payload = routes[key] else {
             return completion(.success(StraitHTTPResponse(status: 404, data: Data())))
         }
         completion(.success(StraitHTTPResponse(status: 200, data: try! JSONSerialization.data(withJSONObject: payload))))

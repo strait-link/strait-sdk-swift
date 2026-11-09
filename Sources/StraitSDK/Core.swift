@@ -338,6 +338,14 @@ func replyMatch(_ reply: Any?) -> MatchInfo? {
     return MatchInfo(method: method, confidence: confidence)
 }
 
+/// The engine's IPv4-only match URL in an unmatched first-launch `/v1/match` reply (contract B24,
+/// engine ADR 0101), or nil. Only an `https` URL whose path is exactly `/v1/match`, no query.
+func replyIpv4Match(_ reply: Any?) -> URL? {
+    guard let s = reply as? String, s.count <= 200, let c = URLComponents(string: s), c.scheme == "https",
+          let host = c.host, !host.isEmpty, c.path == "/v1/match", c.query == nil, c.fragment == nil, c.user == nil else { return nil }
+    return c.url
+}
+
 /// Whether a failed report should be kept for retry: no answer (nil), 429 or 5xx.
 func shouldRetryReport(_ status: Int?) -> Bool {
     guard let status = status else { return true }
