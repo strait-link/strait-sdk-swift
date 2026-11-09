@@ -869,7 +869,8 @@ public final class StraitLinks {
                   (res.json["matched"] as? Bool) != true, let v4 = replyIpv4Match(res.json["ipv4Match"]) else {
                 return finish(first, first)
             }
-            send("POST", v4, body) { second in
+            // At most 10 s more (like the other SDKs' requests): most misses are organic installs.
+            send("POST", v4, body, timeout: 10) { second in
                 if case let .success(again) = second, !shouldRetryReport(again.status), (again.json["matched"] as? Bool) == true {
                     return finish(first, second)
                 }
@@ -1019,14 +1020,18 @@ public final class StraitLinks {
     /// Every engine call goes through here: while opted out nothing leaves the device, except
     /// `lookupOnly` (/v1/lookup: where a short link goes, recorded nowhere, engine ADR 0083).
     func call(_ method: String, _ path: String, _ body: [String: Any]?, lookupOnly: Bool = false, completion: @escaping (Result<Reply, Error>) -> Void) {
+        guard lookupOnly || isEnabled else { return completion(.failure(StraitLinksError.disabled)) }
         guard let url = URL(string: base + path) else { return completion(.failure(StraitLinksError.badEndpoint)) }
         send(method, url, body, lookupOnly: lookupOnly, completion: completion)
     }
 
     /// One request to an absolute URL (the endpoint's, or the engine's IPv4-only one, B24).
-    private func send(_ method: String, _ url: URL, _ body: [String: Any]?, lookupOnly: Bool = false, completion: @escaping (Result<Reply, Error>) -> Void) {
+    /// `timeout`: seconds, else the transport's default.
+    private func send(_ method: String, _ url: URL, _ body: [String: Any]?, lookupOnly: Bool = false, timeout: TimeInterval? = nil,
+                      completion: @escaping (Result<Reply, Error>) -> Void) {
         guard lookupOnly || isEnabled else { return completion(.failure(StraitLinksError.disabled)) }
         var req = URLRequest(url: url)
+        if let timeout = timeout { req.timeoutInterval = timeout }
         req.httpMethod = method
         if let body = body {
             guard JSONSerialization.isValidJSONObject(body),

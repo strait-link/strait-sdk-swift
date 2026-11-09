@@ -72,6 +72,38 @@ final class IpFamilyTests: XCTestCase {
         XCTAssertEqual(engine.calls.filter { $0.host == "v4.straitlink.test" }.count, 0)
     }
 
+    func testTheIpv4AskWaitsAtMostTenSeconds() {
+        let h = Harness(FakeEngine(["/v1/match": missV6, "v4.straitlink.test/v1/match": hitV4]))
+        h.start()
+        XCTAssertEqual(h.engine.calls.first { $0.host == "v4.straitlink.test" }?.timeout, 10)
+    }
+
+    // Paste handoff (B19) reads the first answer's choice; the IPv4 ask only decides whether a match was found.
+    private static let pasteMiss: [String: Any] = {
+        var m = missV6
+        m["ios"] = ["deviceMatching": true, "pasteHandoff": true]
+        return m
+    }()
+    private static let handoff = "https://links.test/h/AbCdEfGhIjKlMnOpQrStUv"
+    private static let claimOk: [String: Any] = ["matched": true, "longUrl": "https://shop.example/x", "linkId": "lnk_1", "matchMethod": "clipboard"]
+
+    func testPasteHandoffStillRunsWhenTheIpv4AskMisses() throws {
+        let spy = SpyPasteboard(probableURL: true, text: Self.handoff)
+        let h = Harness(FakeEngine(["/v1/match": Self.pasteMiss, "v4.straitlink.test/v1/match": ["matched": false], "/v1/handoff/claim": Self.claimOk]), pasteboard: spy)
+        h.start()
+        XCTAssertEqual(h.engine.calls(to: "/v1/handoff/claim").count, 1)
+        XCTAssertEqual(h.events.first?.route, .clipboard)
+    }
+
+    func testNoPastePromptWhenTheIpv4AskMatches() throws {
+        let spy = SpyPasteboard(probableURL: true, text: Self.handoff)
+        let h = Harness(FakeEngine(["/v1/match": Self.pasteMiss, "v4.straitlink.test/v1/match": hitV4, "/v1/handoff/claim": Self.claimOk]), pasteboard: spy)
+        h.start()
+        XCTAssertEqual(spy.touched, 0)
+        XCTAssertTrue(h.engine.calls(to: "/v1/handoff/claim").isEmpty)
+        XCTAssertEqual(h.events.first?.linkId, "lnk_42")
+    }
+
     func testReplyIpv4Match() {
         XCTAssertEqual(replyIpv4Match("https://v4.straitlink.in/v1/match")?.absoluteString, "https://v4.straitlink.in/v1/match")
         for bad: Any? in [nil, 1, "", "https://v4.straitlink.in/v1/match/", "https://u:p@v4.straitlink.in/v1/match", "https:///v1/match", "ftp://x/v1/match"] {

@@ -24,6 +24,7 @@ final class FakeEngine: StraitTransport {
         let query: String?
         let body: [String: Any]?
         var host: String? = nil
+        var timeout: TimeInterval? = nil
     }
     var routes: [String: [String: Any]]
     var offline = false
@@ -40,7 +41,7 @@ final class FakeEngine: StraitTransport {
     func send(_ request: URLRequest, completion: @escaping (Result<StraitHTTPResponse, Error>) -> Void) {
         let url = request.url!
         let body = request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        calls.append(Call(method: request.httpMethod ?? "GET", path: url.path, query: url.query, body: body, host: url.host))
+        calls.append(Call(method: request.httpMethod ?? "GET", path: url.path, query: url.query, body: body, host: url.host, timeout: request.timeoutInterval))
         onCall[url.path]?()
         // A route keyed "host/path" answers only that host (B24: the engine's IPv4-only URL).
         let key = routes["\(url.host ?? "")\(url.path)"] != nil || modes["\(url.host ?? "")\(url.path)"] != nil ? "\(url.host ?? "")\(url.path)" : url.path
