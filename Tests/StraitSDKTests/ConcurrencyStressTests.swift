@@ -69,7 +69,7 @@ final class ConcurrencyStressTests: XCTestCase {
             case 8: strait.onAppState([.active, .inactive, .background][i % 3])
             case 9: strait.onLink { _ in }.cancel(); strait.onLinkStart { _ in }.cancel()
             case 10: group.enter(); strait.claimHandoff(text: "https://links.test/h/tok\(i)") { _ in group.leave() }
-            default: _ = (strait.isEnabled, strait.lastInstallSettings)
+            default: strait.setUserId(i % 24 == 11 ? nil : "user_\(i)"); _ = (strait.isEnabled, strait.lastInstallSettings)
             }
         }
         // Leave the SDK switched on and drained, then every completion must have run.

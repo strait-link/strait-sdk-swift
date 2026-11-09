@@ -280,7 +280,7 @@ public final class StraitLinks {
     public static let enabledKey = "strait.enabled"
     /// This SDK's version, sent as `sdkVersion` with every request that records an app open or
     /// install. Equals the newest `## X.Y.Z` in CHANGELOG.md (a test checks it): bump both together.
-    public static let sdkVersion = "0.11.4"
+    public static let sdkVersion = "0.11.5"
     /// `sdkVersion` on the wire: this SDK names itself, `ios/<sdkVersion>` (B25, shared-spec ADR 0007), so the
     /// engine can tell it from React Native with the same number. A wrapper's own name wins.
     static let wireSdkVersion = "ios/\(sdkVersion)"
@@ -311,6 +311,9 @@ public final class StraitLinks {
     /// the saved queue is not sent. In memory only; guarded by `lock`.
     private var failures = 0
     private var holdUntil: Double = 0
+    /// B27: the app's own user (`setUserId`), already hashed when it was an email or phone. In memory only;
+    /// guarded by `lock`.
+    private var userId: UserIdField?
     /// The jitter in `retryDelayMs` (tests fix it).
     var random: () -> Double = { Double.random(in: 0..<1) }
 
@@ -394,6 +397,7 @@ public final class StraitLinks {
     public func setEnabled(_ enabled: Bool, completion: (() -> Void)? = nil) {
         config.storage.setItem(Self.enabledKey, enabled ? "1" : "0")
         guard enabled else {
+            withLock { userId = nil }
             // Opting out also deletes what was saved to send later.
             locked(tapLock) { config.storage.setItem(Self.tapKey, "") }
             return serial { [self] done in
@@ -408,6 +412,17 @@ public final class StraitLinks {
             return deferredDue
         }
         if due { firstCheck(finish) } else { finish() }
+    }
+
+    /// Your own user id, after your sign-in (contract B27): later `trackEvent` calls carry it to your
+    /// app.event webhook, so you can join Strait events to your users. An email or phone number is hashed
+    /// here (SHA-256, `userIdHashed: true`) and never leaves the device. Kept in memory only: call it again
+    /// when the app starts with a user already signed in, and `setUserId(nil)` on sign-out. Ignored while
+    /// opted out (`setEnabled(false)` also clears it). Never logged.
+    public func setUserId(_ id: String?) {
+        let field = userIdField(id)
+        // The switch is read under the lock, so a concurrent setEnabled(false) can't leave an id behind.
+        withLock { userId = isEnabled ? field : nil }
     }
 
     /// A link delivered while the app is running: Universal Link
@@ -552,11 +567,13 @@ public final class StraitLinks {
         let at = config.now()
         let stored: String? = locked(tapLock) { config.storage.getItem(Self.tapKey) }
         if staleTap(stored, now: at) { dropStaleTap(now: at) }
-        // B13a: built once (tap id chosen now), with an eventId so a retry is stored once.
+        let user = withLock { userId }
+        // B13a: built once (tap id and user id chosen now), with an eventId so a retry is stored once.
         let event = QueuedEvent(
             at: Int64(at), event: name, platform: config.platform,
             eventId: eventId.flatMap { $0.isEmpty ? nil : $0 } ?? newEventId(at),
-            value: value, currency: currency, linkId: linkId, clickId: eventClickId(stored, now: at, explicit: clickId)
+            value: value, currency: currency, linkId: linkId, clickId: eventClickId(stored, now: at, explicit: clickId),
+            userId: user?.userId, userIdHashed: user?.userIdHashed
         )
         sendReport(.event(event)) { [self] status in
             if shouldRetryReport(status) { enqueue(.event(event)) } else { flush(completion: nil) } // the network works
@@ -1142,6 +1159,9 @@ struct QueuedEvent: Codable {
     var currency: String?
     var linkId: String?
     var clickId: String?
+    /// B27: the `setUserId` value when the app called trackEvent (hashed when it was an email or phone).
+    var userId: String?
+    var userIdHashed: Bool?
 }
 
 /// One entry of `strait.pendingOpens`: an open report for /v1/open, or (`"type":"event"`)

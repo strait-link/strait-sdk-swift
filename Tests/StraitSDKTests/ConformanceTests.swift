@@ -24,6 +24,18 @@ final class ConformanceTests: XCTestCase {
         XCTAssertEqual(c["OPEN_QUEUE_MAX"] as? Int, OPEN_QUEUE_MAX)
         XCTAssertEqual(c["OPEN_QUEUE_MAX_AGE_MS"] as? Double, OPEN_QUEUE_MAX_AGE_MS)
         XCTAssertEqual(c["ATTRIBUTION_WINDOW_MS"] as? Double, ATTRIBUTION_WINDOW_MS)
+        XCTAssertEqual(c["USER_ID_MAX"] as? Int, USER_ID_MAX)
+    }
+
+    /// B27 (shared-spec ADR 0009): what setUserId sends with later events.
+    func testUserIdField() throws {
+        for v in try cases("userId") {
+            let name = try XCTUnwrap(v["name"] as? String)
+            let expected = (v["expected"] as? [String: Any]).map {
+                UserIdField(userId: $0["userId"] as? String ?? "", userIdHashed: $0["userIdHashed"] as? Bool ?? false)
+            }
+            XCTAssertEqual(userIdField(v["input"] as? String), expected, name)
+        }
     }
 
     func testFirstLaunchState() throws {
@@ -43,7 +55,7 @@ final class ConformanceTests: XCTestCase {
     }
 
     func testVersion() {
-        XCTAssertEqual(vectors["version"] as? Int, 11)
+        XCTAssertEqual(vectors["version"] as? Int, 14)
     }
 
     func testEventClickId() throws {

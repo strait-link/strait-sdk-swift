@@ -1,5 +1,5 @@
 {
-  "specCommit": "c3f617e",
+  "specCommit": "1ad9f0f",
   "files": {
     "signature": {
       "path": "Tests/StraitSDKTests/test-vectors.json",
@@ -7,11 +7,12 @@
     },
     "conformance": {
       "path": "Tests/StraitSDKTests/conformance-vectors.json",
-      "sha256": "73eb9b93c01facb5a2868354694ec4761951c231960a47de5b725c4b74801c94"
+      "sha256": "263e8c2bff1904d747422955841730a21e1b457e971a6a87d9af22f4652e9f46"
     }
   },
   "conformanceTest": "Tests/StraitSDKTests/ConformanceTests.swift",
   "exempt": {
-    "deviceClass": "iOS uses the device model (UIDevice.model), not the screen size, contract B14"
+    "deviceClass": "iOS uses the device model (UIDevice.model), not the screen size, contract B14",
+    "installReferrer": "Android Play install referrer only, never on iOS, contract B26"
   }
 }

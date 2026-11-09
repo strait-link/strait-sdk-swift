@@ -42,6 +42,7 @@ links.onLink { event in                  // replays past events
   `links.handle(userActivity:)` in `scene(_:continue:)`, `links.handle(url:)` in `scene(_:openURLContexts:)`.
 - SwiftUI: `init() { links.start() }`, then `.onOpenURL { links.handle(url: $0) }` and
   `.onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { links.handle(userActivity: $0) }`.
+- Your user: `links.setUserId(user.id)` after sign-in, `links.setUserId(nil)` on sign-out; later events carry it to the `app.event` webhook (emails and phone numbers are hashed on the device, contract B27).
 
 ## Stop and ask the human
 

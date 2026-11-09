@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.5 (10 Nov 2026)
+
+- `setUserId(_:)` (contract B27, shared-spec ADR 0009): call it after your sign-in and `setUserId(nil)` on sign-out.
+  Later `trackEvent` calls carry the id to your `app.event` webhook (`userId`, `userIdHashed`), so you can join Strait
+  events to your own users and see which campaigns bring paying ones. Emails and phone numbers are hashed on the phone
+  (SHA-256, CryptoKit) and never leave it raw. Memory only, never logged, cleared and not sent while switched off.
+  Conformance vectors v14 (`userId` group; `installReferrer` is Android only).
+
 ## 0.11.4 (9 Nov 2026)
 
 - The SDK now names itself when it reports an app open or install: `sdkVersion` is `ios/0.11.4`, not a bare `0.11.4`
