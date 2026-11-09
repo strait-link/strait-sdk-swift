@@ -274,7 +274,7 @@ public final class StraitLinks {
     public static let enabledKey = "strait.enabled"
     /// This SDK's version, sent as `sdkVersion` with every request that records an app open or
     /// install. Equals the newest `## X.Y.Z` in CHANGELOG.md (a test checks it): bump both together.
-    public static let sdkVersion = "0.11.1"
+    public static let sdkVersion = "0.11.2"
 
     let config: StraitLinksConfig
     let base: String
@@ -838,13 +838,16 @@ public final class StraitLinks {
         } else {
             body["record"] = false // read only: the engine adds no install, open or webhook
         }
-        call("POST", "/v1/match", body) { [self] r in
+        /// `settingsReply` carries the live install settings (the first answer); `r` the match.
+        func finish(_ settingsReply: Result<Reply, Error>, _ r: Result<Reply, Error>) {
             // No answer, 429 or 5xx = try again next launch (reported as 'network').
             var matched = false, reason: String? = "network", dest = Destination.none, linkId: String?, referralCode: String?, match: MatchInfo?
             var pasteHandoff = false
+            if case let .success(first) = settingsReply, !shouldRetryReport(first.status) {
+                pasteHandoff = replyPasteHandoff(first.json)
+                if let settings = replyInstallSettings(first.json, at: config.now()) { withLock { installSettings = settings } }
+            }
             if case let .success(res) = r, !shouldRetryReport(res.status) {
-                pasteHandoff = replyPasteHandoff(res.json)
-                if let settings = replyInstallSettings(res.json, at: config.now()) { withLock { installSettings = settings } }
                 matched = (res.json["matched"] as? Bool) == true
                 reason = matched ? nil : "no_match"
                 dest = matched ? destination(res.json["longUrl"] as? String) : .none
@@ -858,6 +861,20 @@ public final class StraitLinks {
                 rawUrl: nil, url: dest.url, path: dest.path, params: dest.params, linkId: linkId,
                 ms: config.now() - t0, at: t0, referralCode: referralCode, match: match
             ), pasteHandoff)
+        }
+        call("POST", "/v1/match", body) { [self] first in
+            // B24 (engine ADR 0100): asked over IPv6 and nothing found, the engine names its IPv4-only
+            // URL; ask once more there (same openId, same fields). Only a match there replaces this answer.
+            guard record, case let .success(res) = first, !shouldRetryReport(res.status),
+                  (res.json["matched"] as? Bool) != true, let v4 = replyIpv4Match(res.json["ipv4Match"]) else {
+                return finish(first, first)
+            }
+            send("POST", v4, body) { second in
+                if case let .success(again) = second, !shouldRetryReport(again.status), (again.json["matched"] as? Bool) == true {
+                    return finish(first, second)
+                }
+                finish(first, first)
+            }
         }
     }
 
@@ -1002,8 +1019,13 @@ public final class StraitLinks {
     /// Every engine call goes through here: while opted out nothing leaves the device, except
     /// `lookupOnly` (/v1/lookup: where a short link goes, recorded nowhere, engine ADR 0083).
     func call(_ method: String, _ path: String, _ body: [String: Any]?, lookupOnly: Bool = false, completion: @escaping (Result<Reply, Error>) -> Void) {
-        guard lookupOnly || isEnabled else { return completion(.failure(StraitLinksError.disabled)) }
         guard let url = URL(string: base + path) else { return completion(.failure(StraitLinksError.badEndpoint)) }
+        send(method, url, body, lookupOnly: lookupOnly, completion: completion)
+    }
+
+    /// One request to an absolute URL (the endpoint's, or the engine's IPv4-only one, B24).
+    private func send(_ method: String, _ url: URL, _ body: [String: Any]?, lookupOnly: Bool = false, completion: @escaping (Result<Reply, Error>) -> Void) {
+        guard lookupOnly || isEnabled else { return completion(.failure(StraitLinksError.disabled)) }
         var req = URLRequest(url: url)
         req.httpMethod = method
         if let body = body {
