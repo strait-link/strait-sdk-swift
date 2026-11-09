@@ -6,7 +6,7 @@
   Later `trackEvent` calls carry the id to your `app.event` webhook (`userId`, `userIdHashed`), so you can join Strait
   events to your own users and see which campaigns bring paying ones. Emails and phone numbers are hashed on the phone
   (SHA-256, CryptoKit) and never leave it raw. Memory only, never logged, cleared and not sent while switched off.
-  Conformance vectors v13 (`userId` group; `installReferrer` is Android only).
+  Conformance vectors v14 (`userId` group; `installReferrer` is Android only).
 
 ## 0.11.4 (9 Nov 2026)
 

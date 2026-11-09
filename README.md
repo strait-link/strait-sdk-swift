@@ -245,8 +245,8 @@ strait.setUserId(nil)       // on sign-out
 Later `trackEvent` calls carry this id to your `app.event` webhook (`userId`, `userIdHashed`), so you can
 join Strait's tap, link and campaign to your own users and see which campaigns bring paying ones
 (contract B27). It is kept in memory only, never logged, ignored while `setEnabled(false)` (which also
-clears it), and not sent with app opens or installs. An event saved to send later keeps the id it was
-tracked with.
+clears it), and not sent with app opens or installs. An event saved offline keeps the id it was tracked
+with, on the device, until it is sent (up to 7 days; deleted on opt-out).
 
 Emails and phone numbers never leave the phone: an id with `@` is sent as the SHA-256 hex of its
 lower-cased form, one made only of digits, spaces and `+ ( ) . -` with 8-15 digits as the SHA-256 hex of
@@ -540,7 +540,7 @@ The legacy `Strait.resolveDeferredLink` honours the same switch: it reads it fro
 | B18 reported/queued URLs stripped to host + path (+ `utm_source`) via `reportUrl`; expired remembered taps deleted (`staleTap`) | ✓ |
 | B19 paste handoff: chosen in the dashboard and read from the `/v1/match` reply (`ios.pasteHandoff`) at runtime; `clipboardBoost` deprecated, `detectPatterns` first (no prompt), read only when a URL is likely, `parseHandoffUrl`, `POST /v1/handoff/claim`; `claimHandoff(text:)` + `StraitPasteButton` | ✓ |
 | B22 old Firebase `*.page.link` links: short link → `/v1/resolve` (engine matches the old host + code); long link `/?link=<url>` → the `link` value is the destination, read on the device, no lookup (`pageLinkLongLink`, vectors v8) | ✓ |
-| B27 `setUserId(_:)`: `userId` + `userIdHashed` (`userIdField`, vectors v13) on later `/v1/event` bodies only; memory only; emails/phones SHA-256 hashed on the device; cleared by `setEnabled(false)` | ✓ |
+| B27 `setUserId(_:)`: `userId` + `userIdHashed` (`userIdField`, vectors v14) on later `/v1/event` bodies only; memory only; emails/phones SHA-256 hashed on the device; cleared by `setEnabled(false)` | ✓ |
 | B23 `doctor()` setup check: one GET of the AASA, then `doctorFindings` (key, endpoint, host, bundle ID; ids and wording from shared-spec ADR 0002) | ✓ (B1–B6a, B8–B19, B22, B23) |
 
 Both `test-vectors.json` (signature) and `conformance-vectors.json` (pure

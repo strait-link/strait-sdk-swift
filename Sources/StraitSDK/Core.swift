@@ -538,9 +538,10 @@ struct UserIdField: Equatable {
 /// sent as the SHA-256 hex of its lower-case form, a phone number (only digits, spaces, `+ ( ) . -`, with
 /// 8-15 digits) as the SHA-256 hex of its digits: `userIdHashed: true`, the raw value never leaves the device.
 func userIdField(_ id: String?) -> UserIdField? {
-    guard let t = id?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty, t.utf16.count <= USER_ID_MAX else { return nil }
-    if t.contains("@") { return UserIdField(userId: sha256Hex(t.lowercased()), userIdHashed: true) }
+    guard let t = id?.trimmingCharacters(in: jsTrimSet), !t.isEmpty, t.utf16.count <= USER_ID_MAX else { return nil }
     let scalars = t.unicodeScalars
+    // On code points, never grapheme clusters: "a@\u{200C}b" holds no Character "@".
+    if scalars.contains("@") { return UserIdField(userId: sha256Hex(t.lowercased()), userIdHashed: true) }
     let digits = String(String.UnicodeScalarView(scalars.filter { ("0"..."9").contains($0) }))
     let phoneChars = scalars.dropFirst(scalars.first == "+" ? 1 : 0)
     if !phoneChars.isEmpty, phoneChars.allSatisfy({ "0123456789 ().-".unicodeScalars.contains($0) }), (8...15).contains(digits.count) {
@@ -549,6 +550,14 @@ func userIdField(_ id: String?) -> UserIdField? {
     if scalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }) { return nil }
     return UserIdField(userId: t, userIdHashed: false)
 }
+
+/// What JavaScript's `String.prototype.trim` strips, exactly (vectors v14): not U+001C-U+001F, U+0085 or U+200B.
+private let jsTrimSet: CharacterSet = {
+    var s = CharacterSet(charactersIn: "\u{20}\u{A0}\u{1680}\u{2028}\u{2029}\u{202F}\u{205F}\u{3000}\u{FEFF}")
+    s.insert(charactersIn: "\u{09}"..."\u{0D}")
+    s.insert(charactersIn: "\u{2000}"..."\u{200A}")
+    return s
+}()
 
 /// SHA-256 of the UTF-8 bytes of `s`, lower-case hex (CryptoKit, part of the OS).
 func sha256Hex(_ s: String) -> String {

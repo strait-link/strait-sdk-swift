@@ -25,6 +25,23 @@ final class UserIdFieldTests: XCTestCase {
         XCTAssertEqual(userIdField("+91 98765-43210"), UserIdField(userId: sha256Hex("919876543210"), userIdHashed: true))
     }
 
+    /// JavaScript's String.prototype.trim set, exactly (vectors v14).
+    func testTrimsTheJavaScriptSetOnly() {
+        for ws in ["\t", "\n", "\u{0B}", "\u{0C}", "\r", " ", "\u{A0}", "\u{1680}", "\u{2000}", "\u{200A}", "\u{2028}", "\u{2029}", "\u{202F}", "\u{205F}", "\u{3000}", "\u{FEFF}"] {
+            XCTAssertEqual(userIdField(ws + "user_1" + ws), UserIdField(userId: "user_1", userIdHashed: false), ws.unicodeScalars.first!.escaped(asASCII: true))
+        }
+        // Not trimmed: U+001F (then refused as a control character), U+200B and U+0085 (kept).
+        XCTAssertNil(userIdField("user_1\u{1F}"))
+        XCTAssertEqual(userIdField("\u{200B}user_1"), UserIdField(userId: "\u{200B}user_1", userIdHashed: false))
+        XCTAssertEqual(userIdField("user_1\u{85}"), UserIdField(userId: "user_1\u{85}", userIdHashed: false))
+    }
+
+    /// '@' is a code point, never a grapheme cluster (a joiner after it hid it from String.contains).
+    func testAnAtFollowedByAJoinerIsStillAnEmail() {
+        XCTAssertEqual(userIdField("priya@\u{200C}example.com")?.userIdHashed, true)
+        XCTAssertEqual(userIdField("priya@\u{301}example.com")?.userIdHashed, true)
+    }
+
     func testDropsEmptyTooLongAndControlCharacters() {
         for bad in [nil, "", "   ", String(repeating: "x", count: USER_ID_MAX + 1), "a\nb", "a\r\nb"] {
             XCTAssertNil(userIdField(bad), String(describing: bad))
@@ -110,6 +127,19 @@ final class SetUserIdTests: XCTestCase {
         h.engine.modes["/v1/event"] = nil
         h.strait.flushOpenReports()
         XCTAssertEqual(events(h).last?["userId"] as? String, "user_1")
+    }
+
+    /// The id is read when trackEvent is called, before the request goes out: changing it right after
+    /// (the reply not back yet) doesn't change the event.
+    func testTheIdIsReadWhenTrackEventIsCalled() {
+        let h = make()
+        h.engine.modes["/v1/event"] = .hold(200)
+        h.strait.setUserId("user_1")
+        h.strait.trackEvent("purchase")
+        h.strait.setUserId(nil)
+        h.strait.setUserId("other")
+        h.engine.releaseHeld()
+        XCTAssertEqual(events(h).first?["userId"] as? String, "user_1")
     }
 
     func testOptOutClearsItAndSetUserIdWhileOffIsIgnored() {
