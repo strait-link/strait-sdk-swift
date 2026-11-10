@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.8 (10 Nov 2026)
+
+- Privacy manifest (`PrivacyInfo.xcprivacy`) now declares **User ID** (`NSPrivacyCollectedDataTypeUserID`: linked to
+  the user, not used for tracking, purposes App Functionality + Analytics), because `setUserId` (0.11.5) sends the
+  app's own user id with later events. Ids that look like an email or phone are still hashed on the phone. Nothing
+  else in the manifest or the SDK's behaviour changes. Update your App Store privacy answers if you call `setUserId`.
+
 ## 0.11.7 (10 Nov 2026)
 
 - `setUserId` lower-cases an email the same way in every Strait SDK and the engine (contract B27 v16, shared-spec
