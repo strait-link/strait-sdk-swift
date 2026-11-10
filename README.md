@@ -91,7 +91,7 @@ Swift Package Manager:
 Xcode: **File → Add Package Dependencies…** and paste the repo URL, or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/strait-link/strait-sdk-swift", from: "0.11.5")
+.package(url: "https://github.com/strait-link/strait-sdk-swift", from: "0.11.6")
 // target dependency: .product(name: "StraitSDK", package: "strait-sdk-swift")
 ```
 <!-- /brand:install -->
@@ -249,9 +249,11 @@ clears it), and not sent with app opens or installs. An event saved offline keep
 with, on the device, until it is sent (up to 7 days; deleted on opt-out).
 
 Emails and phone numbers never leave the phone: an id with `@` is sent as the SHA-256 hex of its
-lower-cased form, one made only of digits, spaces and `+ ( ) . -` with 8-15 digits as the SHA-256 hex of
-its digits, with `userIdHashed: true` (CryptoKit, part of iOS). To join, hash your own value the same way
-(`sha256("priya@example.com")`, `sha256("919876543210")`). A plain numeric id of 8-15 digits is hashed
+lower-cased form; a phone number (8-15 digits with any spaces, dashes, dots, brackets or slashes, an optional
+`+`, `00` or `tel:`; Indian, Arabic and full-width digits too) as the SHA-256 hex of `+` and its digits when
+written with `+` or `00`, else of its digits, with `userIdHashed: true` (CryptoKit, part of iOS; shared-spec ADR
+0010). To join, hash your own value the same way (`sha256("priya@example.com")`, `sha256("+919876543210")` for a
+number stored in E.164). A plain numeric id of 8-15 digits is hashed
 too; prefix it (`u_12345678`) to keep it readable. Ids longer than 128 characters (UTF-16 units) or
 holding control characters are not sent (and clear the previous one). Anyone with your publishable key
 can send any `userId`, so treat it as a claim, like revenue sent from the app.

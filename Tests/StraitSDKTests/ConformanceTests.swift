@@ -55,7 +55,7 @@ final class ConformanceTests: XCTestCase {
     }
 
     func testVersion() {
-        XCTAssertEqual(vectors["version"] as? Int, 14)
+        XCTAssertEqual(vectors["version"] as? Int, 15)
     }
 
     func testEventClickId() throws {

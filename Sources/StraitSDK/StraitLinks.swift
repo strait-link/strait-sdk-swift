@@ -280,7 +280,7 @@ public final class StraitLinks {
     public static let enabledKey = "strait.enabled"
     /// This SDK's version, sent as `sdkVersion` with every request that records an app open or
     /// install. Equals the newest `## X.Y.Z` in CHANGELOG.md (a test checks it): bump both together.
-    public static let sdkVersion = "0.11.5"
+    public static let sdkVersion = "0.11.6"
     /// `sdkVersion` on the wire: this SDK names itself, `ios/<sdkVersion>` (B25, shared-spec ADR 0007), so the
     /// engine can tell it from React Native with the same number. A wrapper's own name wins.
     static let wireSdkVersion = "ios/\(sdkVersion)"
