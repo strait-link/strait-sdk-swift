@@ -550,11 +550,11 @@ func userIdField(_ id: String?) -> UserIdField? {
 /// The zero of each run of ten decimal digits B27 reads: ASCII, Arabic-Indic, Eastern Arabic-Indic, Devanagari, Bengali, Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam, full-width.
 private let digitZeros: [UInt16] = [0x30, 0x660, 0x6F0, 0x966, 0x9E6, 0xA66, 0xAE6, 0xB66, 0xBE6, 0xC66, 0xCE6, 0xD66, 0xFF10]
 
-/// Characters a written phone number may hold between its digits (B27 v15): spaces, dashes, dots, brackets, slashes, invisible marks.
+/// Characters a written phone number may hold between its digits (B27 v15): spaces, dashes (incl. Japanese ー), dots, brackets, slashes, invisible marks.
 private func isPhoneSeparator(_ c: UInt16) -> Bool {
     c == 0x20 || c == 0x28 || c == 0x29 || c == 0x2D || c == 0x2E || c == 0x2F || c == 0xA0 ||
         (0x2000...0x2015).contains(c) || (0x202A...0x202F).contains(c) || c == 0x205F || c == 0x2060 || (0x2066...0x2069).contains(c) ||
-        c == 0x2212 || c == 0x3000 || c == 0xFEFF || c == 0xFF08 || c == 0xFF09 || (0xFF0D...0xFF0F).contains(c)
+        c == 0xAD || c == 0x61C || c == 0x30FC || c == 0xFF70 || c == 0x2212 || c == 0x3000 || c == 0xFEFF || c == 0xFF08 || c == 0xFF09 || (0xFF0D...0xFF0F).contains(c)
 }
 
 /// B27 v15 (shared-spec ADR 0010): the canonical form of a phone number, or nil when `t` is not one. After an
