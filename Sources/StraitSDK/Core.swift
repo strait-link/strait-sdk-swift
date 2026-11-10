@@ -276,6 +276,47 @@ func eventClickId(_ stored: String?, now: Double, explicit: String? = nil) -> St
     return age >= 0 && age <= ATTRIBUTION_WINDOW_MS ? clickId.lowercased() : nil
 }
 
+/// B28: the days after the install that send a "came back" note, and a day in ms.
+let RETURN_DAYS = [1, 7, 30]
+let DAY_MS: Double = 24 * 60 * 60 * 1000
+
+/// A JSON number (not a bool, which JSONSerialization also bridges to NSNumber).
+func jsonNumber(_ v: Any?) -> Double? {
+    guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
+    return n.doubleValue
+}
+
+/// Storage value for the install's tap (key `strait.installTap`, B28): `{"at":<epoch ms>,"clickId":…,"sent":[…]}`.
+func installTapValue(_ clickId: String, at: Double, sent: [Int] = []) -> String {
+    let obj: [String: Any] = ["clickId": clickId.lowercased(), "at": at == at.rounded(.down) ? Int64(at) as Any : at, "sent": sent]
+    guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
+          let s = String(data: data, encoding: .utf8) else { return "" }
+    return s
+}
+
+/// A "came back" note due now (contract B28).
+struct ReturnNote: Equatable {
+    let day: Int
+    let clickId: String
+    let openId: String
+}
+
+/// The "came back" note due now (contract B28), or nil: the install tap (`stored`, see
+/// `installTapValue`) is readable, `day` = whole days since the install open is 1, 7 or 30, and
+/// that day was not sent yet. At most three per install, ever.
+func returnNote(_ stored: String?, now: Double) -> ReturnNote? {
+    guard let stored = stored, let data = stored.data(using: .utf8),
+          let obj = (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) as? [String: Any],
+          let clickId = obj["clickId"] as? String, isClickId(clickId),
+          let at = jsonNumber(obj["at"]), at.isFinite, at > 0, now >= at
+    else { return nil }
+    let days = ((now - at) / DAY_MS).rounded(.down)
+    guard let day = RETURN_DAYS.first(where: { Double($0) == days }) else { return nil }
+    if let sent = obj["sent"] as? [Any], sent.contains(where: { jsonNumber($0) == Double(day) }) { return nil }
+    let id = clickId.lowercased()
+    return ReturnNote(day: day, clickId: id, openId: "r\(day)-\(id)")
+}
+
 /// True when the remembered tap (`stored`, see `rememberTap`) is set but can no
 /// longer be used: unreadable, malformed, or opened more than
 /// `ATTRIBUTION_WINDOW_MS` before `now` (or after it). The SDK then deletes it
