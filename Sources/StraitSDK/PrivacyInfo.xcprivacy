@@ -15,6 +15,10 @@
     * Product interaction: link opens reported to the app owner's Strait workspace,
       each with the app's version (CFBundleShortVersionString) and this SDK's version,
       for support. Reading the app's own Info.plist is not a required-reason API.
+  - User ID (only when the app calls setUserId): the app's own id for its signed-in
+    user goes with later events to the app owner's Strait workspace, so they can join
+    events to their users (linked to the user, never used for tracking). Ids that look
+    like an email or phone number are hashed (SHA-256) on the device and never sent raw.
   - Paste handoff (off by default): only when the app owner turns it on in
     their Strait dashboard (read from Strait's server on first launch), the SDK
     checks the clipboard on first launch and sends only a Strait handoff token
@@ -64,6 +68,19 @@
 			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
 			<false/>
 			<key>NSPrivacyCollectedDataTypePurposes</key>
