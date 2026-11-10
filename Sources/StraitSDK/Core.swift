@@ -533,15 +533,30 @@ struct UserIdField: Equatable {
     var userIdHashed: Bool
 }
 
+/// B27 v16 (shared-spec ADR 0011): lower case per code point, no context, no language, so every runtime agrees:
+/// `İ` → `i̇` (i + U+0307) and `Σ` → `σ` first. The Swift 6 stdlib already lowers this way; older iOS runtimes lowered
+/// through ICU, whose final-sigma rule gives `ς` at the end of a word.
+func lowerEmail(_ s: String) -> String {
+    var out = String.UnicodeScalarView()
+    for u in s.unicodeScalars {
+        switch u {
+        case "\u{0130}": out.append("i"); out.append("\u{0307}")
+        case "\u{03A3}": out.append("\u{03C3}")
+        default: out.append(u)
+        }
+    }
+    return String(out).lowercased()
+}
+
 /// B27 (shared-spec ADR 0009, ADR 0010): what `setUserId(id)` sends with later events, or nil (nothing sent).
 /// Trimmed; empty, longer than USER_ID_MAX or holding a control character = nil. An email (any `@`, `＠` or `﹫`)
-/// is sent as the SHA-256 hex of its lower-case form, a phone number (`phoneNumberForm`) as the SHA-256 hex of its
+/// is sent as the SHA-256 hex of `lowerEmail` of it, a phone number (`phoneNumberForm`) as the SHA-256 hex of its
 /// canonical form: `userIdHashed: true`, the raw value never leaves the device.
 func userIdField(_ id: String?) -> UserIdField? {
     guard let t = id?.trimmingCharacters(in: jsTrimSet), !t.isEmpty, t.utf16.count <= USER_ID_MAX else { return nil }
     let scalars = t.unicodeScalars
     // On code points, never grapheme clusters: "a@\u{200C}b" holds no Character "@".
-    if scalars.contains(where: { $0 == "@" || $0 == "\u{FF20}" || $0 == "\u{FE6B}" }) { return UserIdField(userId: sha256Hex(t.lowercased()), userIdHashed: true) }
+    if scalars.contains(where: { $0 == "@" || $0 == "\u{FF20}" || $0 == "\u{FE6B}" }) { return UserIdField(userId: sha256Hex(lowerEmail(t)), userIdHashed: true) }
     if let phone = phoneNumberForm(t) { return UserIdField(userId: sha256Hex(phone), userIdHashed: true) }
     if scalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }) { return nil }
     return UserIdField(userId: t, userIdHashed: false)
