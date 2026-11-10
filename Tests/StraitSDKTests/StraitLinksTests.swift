@@ -1542,7 +1542,7 @@ final class DeferredMethodChoiceTests: XCTestCase {
         XCTAssertEqual(spy1.touched, 0)
         XCTAssertEqual(spy2.readCalls, 1)
         for s in [storage1, storage2] {
-            XCTAssertTrue(s.keys.isSubset(of: [StraitLinks.deferredFlag, StraitLinks.tapKey, StraitLinks.queueKey]), "the choice is never stored: \(s.keys)")
+            XCTAssertTrue(s.keys.isSubset(of: [StraitLinks.deferredFlag, StraitLinks.tapKey, StraitLinks.queueKey, StraitLinks.installTapKey]), "the choice is never stored: \(s.keys)")
         }
     }
 

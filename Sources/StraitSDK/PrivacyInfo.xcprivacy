@@ -15,6 +15,9 @@
     * Product interaction: link opens reported to the app owner's Strait workspace,
       each with the app's version (CFBundleShortVersionString) and this SDK's version,
       for support. Reading the app's own Info.plist is not a required-reason API.
+      Plus at most three "came back" notes per install, ever (day 1, 7 and 30 after
+      the install), each with only the install's tap id (Strait's own random id for
+      the tap that brought the install), the day, the platform and the versions.
   - User ID (only when the app calls setUserId): the app's own id for its signed-in
     user goes with later events to the app owner's Strait workspace, so they can join
     events to their users (linked to the user, never used for tracking). Ids that look
@@ -24,7 +27,8 @@
     checks the clipboard on first launch and sends only a Strait handoff token
     found there, never other clipboard text.
   - Required-reason API: UserDefaults stores the SDK's own state (CA92.1): the
-    once-per-install flag, the last tap id, and open reports waiting to be
+    once-per-install flag, the last tap id, the install's tap id (for the
+    "came back" notes; deleted by setEnabled(false)), and open reports waiting to be
     re-sent (at most 7 days / 100).
   - Required-reason API: file timestamps (C617.1): the creation date of the SDK's
     own empty marker file Application Support/Strait/install-time, inside the app

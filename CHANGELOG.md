@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- "Came back" notes (contract B28, shared-spec ADR 0012): the SDK keeps the tap id of the link that brought the
+  install (`strait.installTap`, written once by the install's first open) and sends at most three notes per install,
+  ever: on day 1, 7 and 30 after the install, the first time the app starts or comes to the front that day
+  (`POST /v1/open {kind: "return", day, clickId, openId: "r<day>-<tap id>"}`, saved and retried like an open report).
+  No new identifier. Nothing while switched off; `setEnabled(false)` also deletes the install tap.
+  Feeds the dashboard's Came back D1 / D7 / D30 columns. Conformance vectors v17 (`returnNote`). The privacy
+  manifest's comment now names the notes; its data types are unchanged (Product interaction, not linked).
+  **Not released yet:** waits for the privacy wording OK.
+
 ## 0.11.8 (10 Nov 2026)
 
 - Privacy manifest (`PrivacyInfo.xcprivacy`) now declares **User ID** (`NSPrivacyCollectedDataTypeUserID`: linked to

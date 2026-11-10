@@ -25,6 +25,24 @@ final class ConformanceTests: XCTestCase {
         XCTAssertEqual(c["OPEN_QUEUE_MAX_AGE_MS"] as? Double, OPEN_QUEUE_MAX_AGE_MS)
         XCTAssertEqual(c["ATTRIBUTION_WINDOW_MS"] as? Double, ATTRIBUTION_WINDOW_MS)
         XCTAssertEqual(c["USER_ID_MAX"] as? Int, USER_ID_MAX)
+        XCTAssertEqual(c["RETURN_DAYS"] as? [Int], RETURN_DAYS)
+        XCTAssertEqual(c["DAY_MS"] as? Double, DAY_MS)
+    }
+
+    /// B28 (shared-spec ADR 0012): the day 1 / 7 / 30 "came back" note due now, or none.
+    func testReturnNote() throws {
+        for v in try cases("returnNote") {
+            let name = try XCTUnwrap(v["name"] as? String)
+            let now = try XCTUnwrap(v["now"] as? Double, name)
+            let expected = try (v["expected"] as? [String: Any]).map {
+                ReturnNote(
+                    day: try XCTUnwrap($0["day"] as? Int, name),
+                    clickId: try XCTUnwrap($0["clickId"] as? String, name),
+                    openId: try XCTUnwrap($0["openId"] as? String, name)
+                )
+            }
+            XCTAssertEqual(returnNote(v["stored"] as? String, now: now), expected, name)
+        }
     }
 
     /// B27 (shared-spec ADR 0009): what setUserId sends with later events.
@@ -55,7 +73,7 @@ final class ConformanceTests: XCTestCase {
     }
 
     func testVersion() {
-        XCTAssertEqual(vectors["version"] as? Int, 16)
+        XCTAssertEqual(vectors["version"] as? Int, 17)
     }
 
     func testEventClickId() throws {

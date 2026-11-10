@@ -278,6 +278,9 @@ public final class StraitLinks {
     public static let installTimeKey = "strait.installTime"
     /// The opt-out switch (`setEnabled`): "0" = off; absent = on.
     public static let enabledKey = "strait.enabled"
+    /// The tap id of the link that brought this install, kept once for the day 1 / 7 / 30 "came back"
+    /// notes (contract B28): `{"at":<ms>,"clickId":…,"sent":[…]}`.
+    public static let installTapKey = "strait.installTap"
     /// This SDK's version, sent as `sdkVersion` with every request that records an app open or
     /// install. Equals the newest `## X.Y.Z` in CHANGELOG.md (a test checks it): bump both together.
     public static let sdkVersion = "0.11.8"
@@ -340,7 +343,6 @@ public final class StraitLinks {
     /// runs the deferred check once per install — skipped (but marked done)
     /// when the launch itself was a link — and sends any saved open reports.
     public func start(initialURL: URL? = nil, completion: (() -> Void)? = nil) {
-        if config.observeLifecycle { observeAppLifecycle() }
         dropStaleTap(now: config.now())
         // B6a: the install time stored with the flag tells a restored backup of another
         // install from this one (then the check runs again). Cleared before the time is
@@ -353,7 +355,12 @@ public final class StraitLinks {
         if s.clearFlag { config.storage.setItem(Self.deferredFlag, "") }
         if let t = s.storeInstallTime { config.storage.setItem(Self.installTimeKey, t) }
         let firstLaunch = s.firstLaunch
+        // B28: a new install (or a restored backup of another one) starts without an install tap.
+        if firstLaunch { locked(tapLock) { config.storage.setItem(Self.installTapKey, "") } }
+        // Observed only now, so a foreground can't check a restored backup's install tap first.
+        if config.observeLifecycle { observeAppLifecycle() }
         let finish = { [self] in
+            checkReturn()
             flush(completion: nil)
             deliver { completion?() }
         }
@@ -399,7 +406,11 @@ public final class StraitLinks {
         guard enabled else {
             withLock { userId = nil }
             // Opting out also deletes what was saved to send later.
-            locked(tapLock) { config.storage.setItem(Self.tapKey, "") }
+            // B28: and the install tap, so this install never sends a "came back" note again.
+            locked(tapLock) {
+                config.storage.setItem(Self.tapKey, "")
+                config.storage.setItem(Self.installTapKey, "")
+            }
             return serial { [self] done in
                 writeQueue([])
                 done()
@@ -452,7 +463,10 @@ public final class StraitLinks {
     public func onAppState(_ state: AppLifecycleState, at: Double? = nil) {
         let now = at ?? config.now()
         withLock { tracker.onState(state, now: now) }
-        if state == .active { flush(completion: nil) }
+        if state == .active {
+            flush(completion: nil)
+            checkReturn()
+        }
     }
 
     /// Observe UIApplication notifications (called by `start` unless
@@ -612,7 +626,7 @@ public final class StraitLinks {
             ))
             return deliver { completion?(e) }
         }
-        claim(token: token, id: id, t0: t0) { [self] outcome in
+        claim(token: token, id: id, t0: t0, install: false) { [self] outcome in
             let e: LinkEvent
             switch outcome {
             case let .matched(event): e = emit(event)
@@ -646,7 +660,8 @@ public final class StraitLinks {
 
     /// POST /v1/handoff/claim. `.unmatched("network")` = no answer, 429 or 5xx.
     /// The matched event is not emitted here; the caller emits it.
-    private func claim(token: String, id: String, t0: Double, completion: @escaping (ClaimOutcome) -> Void) {
+    /// `install`: the once-per-install check's claim, whose tap id becomes the install tap (B28).
+    private func claim(token: String, id: String, t0: Double, install: Bool, completion: @escaping (ClaimOutcome) -> Void) {
         var body: [String: Any] = [
             "publishableKey": config.publishableKey, "token": token, "platform": "ios", "openId": id, "at": Int64(t0),
         ]
@@ -658,7 +673,7 @@ public final class StraitLinks {
             guard (res.json["matched"] as? Bool) == true else {
                 return completion(.unmatched(reason: (res.json["reason"] as? String) ?? "no_match"))
             }
-            noteTap(replyClickId(res.json["clickId"]), at: t0)
+            noteTap(replyClickId(res.json["clickId"]), at: t0, install: install)
             let dest = destination(res.json["longUrl"] as? String)
             completion(.matched(LinkEvent(
                 id: id, kind: .deferred, route: .clipboard, appState: .closed, matched: true, reason: nil,
@@ -697,10 +712,39 @@ public final class StraitLinks {
     // MARK: Internals
 
     /// Remember the tap of an attributed open (B15), or forget the older one
-    /// when this newer attributed open has no tap id the SDK knows.
-    private func noteTap(_ clickId: String?, at: Double) {
+    /// when this newer attributed open has no tap id the SDK knows. `install`: this open is the
+    /// install's own first open; its tap id is also kept, once, as the install tap (B28).
+    private func noteTap(_ clickId: String?, at: Double, install: Bool = false) {
         // Checked under the lock: a reply that lands after setEnabled(false) keeps no tap.
-        locked(tapLock) { if isEnabled { config.storage.setItem(Self.tapKey, clickId.map { rememberTap($0, at: at) } ?? "") } }
+        locked(tapLock) {
+            guard isEnabled else { return }
+            config.storage.setItem(Self.tapKey, clickId.map { rememberTap($0, at: at) } ?? "")
+            if install, let clickId = clickId, (config.storage.getItem(Self.installTapKey) ?? "").isEmpty {
+                config.storage.setItem(Self.installTapKey, installTapValue(clickId, at: at))
+            }
+        }
+    }
+
+    /// B28: the day 1 / 7 / 30 "came back" note. The day is marked sent (and read back) under the tap
+    /// lock before the note goes, so checks run one at a time and a failed write sends nothing; then
+    /// it is reported like an open (saved and retried on no answer, 429 or 5xx). Nothing while off.
+    private func checkReturn() {
+        let now = config.now()
+        let note: ReturnNote? = locked(tapLock) {
+            guard isEnabled, let stored = config.storage.getItem(Self.installTapKey),
+                  let note = returnNote(stored, now: now),
+                  let obj = (try? JSONSerialization.jsonObject(with: Data(stored.utf8))) as? [String: Any],
+                  let at = jsonNumber(obj["at"]) else { return nil }
+            let sent = ((obj["sent"] as? [Any]) ?? []).compactMap { jsonNumber($0).flatMap { Int(exactly: $0) } }
+            let marked = installTapValue(note.clickId, at: at, sent: sent + [note.day])
+            config.storage.setItem(Self.installTapKey, marked)
+            return config.storage.getItem(Self.installTapKey) == marked ? note : nil
+        }
+        guard let note = note else { return }
+        report(.ret(ReturnReport(
+            openId: note.openId, day: note.day, clickId: note.clickId, platform: config.platform, at: Int64(now),
+            appVersion: wireVersion(config.appVersion), sdkVersion: wireVersion(config.sdkVersion) ?? Self.wireSdkVersion
+        )))
     }
 
     /// B18: delete an expired remembered tap instead of only ignoring it. Re-read
@@ -744,12 +788,12 @@ public final class StraitLinks {
         case let .destination(route, url, path, params, clickId):
             // Navigation never waits for the report (none while opted out).
             if on {
-                if let clickId = clickId { noteTap(clickId, at: t0) }
-                report(OpenReport(
+                if let clickId = clickId { noteTap(clickId, at: t0, install: firstLaunch) }
+                report(.open(OpenReport(
                     openId: id, kind: .direct, route: route, appState: appState, platform: platform, url: reportUrl(url),
                     clickId: clickId, linkId: nil, matched: true, reason: nil, firstLaunch: firstLaunch, at: t0,
                     appVersion: config.appVersion, sdkVersion: config.sdkVersion
-                ))
+                )))
             }
             done(route, true, nil, Destination(url: url, path: path, params: params), nil)
         case .shortLink where !on:
@@ -783,13 +827,13 @@ public final class StraitLinks {
                 let matched = (json["matched"] as? Bool) == true
                 let reason = matched ? nil : (json["reason"] as? String) ?? (json["error"] as? String)
                 let linkId = json["linkId"] as? String
-                if matched { noteTap(replyClickId(json["clickId"]), at: t0) }
+                if matched { noteTap(replyClickId(json["clickId"]), at: t0, install: firstLaunch) }
                 if (json["recorded"] as? Bool) != true {
                     var rep = base
                     rep.matched = matched
                     rep.reason = reason
                     rep.linkId = linkId
-                    report(rep)
+                    report(.open(rep))
                 }
                 done(.appLink, matched, reason, matched ? destination(json["longUrl"] as? String) : .none, linkId)
             }
@@ -832,7 +876,7 @@ public final class StraitLinks {
             clipboardToken(skip: skip) { [self] token in
                 guard let token = token else { return completion(done(matchEvent)) }
                 // Same openId as the match, so the install is counted once.
-                claim(token: token, id: id, t0: t0) { [self] outcome in
+                claim(token: token, id: id, t0: t0, install: true) { [self] outcome in
                     switch outcome {
                     case let .matched(e): completion(done(e))
                     case .unmatched(reason: "network"):
@@ -880,7 +924,7 @@ public final class StraitLinks {
                 linkId = res.json["linkId"] as? String
                 referralCode = matched ? replyReferralCode(res.json["referralCode"]) : nil
                 match = matched ? replyMatch(res.json["match"]) : nil
-                if record && matched { noteTap(replyClickId(res.json["clickId"]), at: t0) }
+                if record && matched { noteTap(replyClickId(res.json["clickId"]), at: t0, install: true) }
             }
             completion(LinkEvent(
                 id: id, kind: .deferred, route: .fingerprint, appState: .closed, matched: matched, reason: reason,
@@ -968,6 +1012,9 @@ public final class StraitLinks {
             path = "/v1/event"
             body["type"] = nil
             body["at"] = nil
+        case .ret:
+            path = "/v1/open" // B28: the note only, no device class
+            body["type"] = nil
         }
         call("POST", path, body) { [self] r in
             let res = try? r.get()
@@ -988,10 +1035,10 @@ public final class StraitLinks {
         }
     }
 
-    /// Report an open now; keep it for retry if it doesn't get through.
-    private func report(_ rep: OpenReport) {
-        sendReport(.open(rep)) { [self] status in
-            if shouldRetryReport(status) { enqueue(.open(rep)) } else { flush(completion: nil) } // the network works
+    /// Report an open (or a B28 note) now; keep it for retry if it doesn't get through.
+    private func report(_ rep: QueuedReport) {
+        sendReport(rep) { [self] status in
+            if shouldRetryReport(status) { enqueue(rep) } else { flush(completion: nil) } // the network works
         }
     }
 
@@ -1164,23 +1211,42 @@ struct QueuedEvent: Codable {
     var userIdHashed: Bool?
 }
 
-/// One entry of `strait.pendingOpens`: an open report for /v1/open, or (`"type":"event"`)
-/// an event for /v1/event.
+/// B28: a "came back" note (day 1, 7 or 30 after the install), saved like an open report (no key).
+struct ReturnReport: Codable {
+    var type = "return"
+    var openId: String
+    var kind = "return"
+    var day: Int
+    var clickId: String
+    var platform: String
+    var at: Int64 // whole ms
+    var appVersion: String?
+    var sdkVersion: String?
+}
+
+/// One entry of `strait.pendingOpens`: an open report for /v1/open, (`"type":"event"`) an event for
+/// /v1/event, or (`"type":"return"`) a B28 note for /v1/open.
 enum QueuedReport: Codable {
     case open(OpenReport)
     case event(QueuedEvent)
+    case ret(ReturnReport)
 
     private enum Keys: String, CodingKey { case type }
 
     init(from decoder: Decoder) throws {
         let type = try decoder.container(keyedBy: Keys.self).decodeIfPresent(String.self, forKey: .type)
-        self = type == "event" ? .event(try QueuedEvent(from: decoder)) : .open(try OpenReport(from: decoder))
+        switch type {
+        case "event": self = .event(try QueuedEvent(from: decoder))
+        case "return": self = .ret(try ReturnReport(from: decoder))
+        default: self = .open(try OpenReport(from: decoder))
+        }
     }
 
     func encode(to encoder: Encoder) throws {
         switch self {
         case let .open(r): try r.encode(to: encoder)
         case let .event(e): try e.encode(to: encoder)
+        case let .ret(n): try n.encode(to: encoder)
         }
     }
 
@@ -1188,6 +1254,7 @@ enum QueuedReport: Codable {
         switch self {
         case let .open(r): return r.at
         case let .event(e): return e.at
+        case let .ret(n): return n.at
         }
     }
 }

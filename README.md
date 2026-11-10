@@ -172,6 +172,14 @@ Every time a link opens the app, the SDK reports it once (contract B14):
 
 Each of these reports also carries your app's version (`CFBundleShortVersionString`, override with `StraitLinksConfig.appVersion`) and the SDK's version (`StraitLinks.sdkVersion`), so support can see which version a person runs; events and the opt-out `/v1/lookup` don't.
 
+**"Came back" notes (contract B28).** So the dashboard can show whether the people a campaign brought came back
+(D1 / D7 / D30), the SDK sends at most three tiny notes per install, ever: the first time the app starts or comes to
+the front on day 1, day 7 and day 30 after the install. Each note carries only the install's tap id (Strait's own
+random id for the tap that brought the install, which the SDK already keeps, as `strait.installTap`), the day number,
+the platform and the app / SDK version. No device id, no user id, no URL. Installs that no Strait link brought send
+nothing. Nothing is sent while switched off, and `setEnabled(false)` deletes the stored install tap, so that install
+never sends a note again.
+
 Reports that can't be sent (offline, server busy) are saved in `storage`
 (`strait.pendingOpens`) and retried on the next `start`, whenever the app
 becomes active, and after any report that gets through, for up to 7 days
@@ -512,7 +520,7 @@ A `LinkStart` with the same `id` fires first, before any network call.
 
 ## User consent / opt-out
 
-If your app asks for consent first (for example under India's DPDP Act or a GDPR consent flow in the EU), call `strait.setEnabled(false)` until the person agrees: Strait then sends no open reports or events, does no install matching, and deletes reports waiting on the device. The choice is kept across launches; `setEnabled(true)` turns it back on (default: on) and `isEnabled` reads it.
+If your app asks for consent first (for example under India's DPDP Act or a GDPR consent flow in the EU), call `strait.setEnabled(false)` until the person agrees: Strait then sends no open reports or events, does no install matching, and deletes reports waiting on the device (and the install tap behind the day 1 / 7 / 30 "came back" notes, which then never resume). The choice is kept across launches; `setEnabled(true)` turns it back on (default: on) and `isEnabled` reads it.
 Links that carry their own destination still open your screens. A Strait short link is looked up through the engine's `/v1/lookup`, which records nothing (no tap, no open, no tap id), so it still opens the right screen; only if that lookup fails (offline) does it come back `matched: false, reason: "disabled"`. Whether you need consent, and for what, is a question for your own legal advice.
 The legacy `Strait.resolveDeferredLink` honours the same switch: it reads it from the same storage (default `UserDefaults.standard`; pass `storage:` if you give `StraitLinks` another one), and while off it sends nothing (no install) and returns `.none`.
 
@@ -543,6 +551,7 @@ The legacy `Strait.resolveDeferredLink` honours the same switch: it reads it fro
 | B19 paste handoff: chosen in the dashboard and read from the `/v1/match` reply (`ios.pasteHandoff`) at runtime; `clipboardBoost` deprecated, `detectPatterns` first (no prompt), read only when a URL is likely, `parseHandoffUrl`, `POST /v1/handoff/claim`; `claimHandoff(text:)` + `StraitPasteButton` | ✓ |
 | B22 old Firebase `*.page.link` links: short link → `/v1/resolve` (engine matches the old host + code); long link `/?link=<url>` → the `link` value is the destination, read on the device, no lookup (`pageLinkLongLink`, vectors v8) | ✓ |
 | B27 `setUserId(_:)`: `userId` + `userIdHashed` (`userIdField`, vectors v14) on later `/v1/event` bodies only; memory only; emails/phones SHA-256 hashed on the device; cleared by `setEnabled(false)` | ✓ |
+| B28 "came back" notes: install tap `strait.installTap` kept once by the install's first open (cleared at a first launch and by `setEnabled(false)`); on start and on becoming active `returnNote` (vectors v17) → day marked sent, then `POST /v1/open {kind:"return", day, clickId, openId:"r<day>-<tap id>"}`, queued like an open | ✓ (not released yet) |
 | B23 `doctor()` setup check: one GET of the AASA, then `doctorFindings` (key, endpoint, host, bundle ID; ids and wording from shared-spec ADR 0002) | ✓ (B1–B6a, B8–B19, B22, B23) |
 
 Both `test-vectors.json` (signature) and `conformance-vectors.json` (pure
